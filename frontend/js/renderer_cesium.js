@@ -116,8 +116,9 @@ window.GIS = window.GIS || {};
     if (!container3d) return;
     viewer = new Cesium.Viewer(container3d, {
       baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
-        url: ESRI_IMAGERY,
-        credit: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
+        url: AMAP_IMAGERY,
+        subdomains: ['1', '2', '3', '4'],
+        credit: '© 高德地图',
       })),
       // —— 零 Ion 依赖清单：以下默认值都指向 Ion，必须显式关掉 ——
       baseLayerPicker: false,
