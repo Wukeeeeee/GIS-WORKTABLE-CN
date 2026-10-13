@@ -46,7 +46,7 @@ def candidate_ports():
         if not 1 <= port <= 65535:
             raise ValueError("GIS_PORT must be between 1 and 65535")
         return [port]
-    return [8000]
+    return [8010]
 
 
 def select_port():

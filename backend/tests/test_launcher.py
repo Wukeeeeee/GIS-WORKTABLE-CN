@@ -18,34 +18,34 @@ def test_probe_requires_service_and_workspace(monkeypatch, payload, expected):
     opener = MagicMock()
     opener.open.return_value.__enter__.return_value.read.return_value = json.dumps(payload).encode()
     monkeypatch.setattr(launcher.urllib.request, "build_opener", lambda *args: opener)
-    assert bool(launcher.probe(8000)) is expected
+    assert bool(launcher.probe(8010)) is expected
 
 
 def test_default_port_conflict_does_not_switch_ports(monkeypatch):
     monkeypatch.delenv("GIS_PORT", raising=False)
     monkeypatch.setattr(launcher, "port_available", lambda port: port >= 8002)
     monkeypatch.setattr(launcher, "probe", lambda port: None)
-    with pytest.raises(RuntimeError, match="Port 8000"):
+    with pytest.raises(RuntimeError, match="Port 8010"):
         launcher.select_port()
 
 
 def test_port_selection_reuses_current_checkout(monkeypatch):
     monkeypatch.delenv("GIS_PORT", raising=False)
     monkeypatch.setattr(launcher, "port_available", lambda port: False)
-    monkeypatch.setattr(launcher, "probe", lambda port: launcher.health_identity() if port == 8000 else None)
-    assert launcher.select_port() == 8000
+    monkeypatch.setattr(launcher, "probe", lambda port: launcher.health_identity() if port == 8010 else None)
+    assert launcher.select_port() == 8010
 
 
 def test_default_port_and_explicit_override(monkeypatch):
     monkeypatch.delenv("GIS_PORT", raising=False)
     monkeypatch.setattr(launcher, "port_available", lambda port: True)
-    assert launcher.select_port() == 8000
+    assert launcher.select_port() == 8010
     monkeypatch.setenv("GIS_PORT", "8002")
     assert launcher.select_port() == 8002
 
 
 def test_explicit_port_conflict_fails(monkeypatch):
-    monkeypatch.setenv("GIS_PORT", "8000")
+    monkeypatch.setenv("GIS_PORT", "8010")
     monkeypatch.setattr(launcher, "port_available", lambda port: False)
     monkeypatch.setattr(launcher, "probe", lambda port: None)
     with pytest.raises(RuntimeError):

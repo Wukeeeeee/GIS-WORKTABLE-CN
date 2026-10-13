@@ -2,7 +2,7 @@
  * GIS-WORKTABLE 本地客户端外壳
  *
  * 职责：
- *  1. 使用 GIS_PORT 或默认 8000 端口，只复用当前仓库的后端
+ *  1. 使用 GIS_PORT 或默认 8010 端口，只复用当前仓库的后端
  *  2. 未运行时，用本地 Python 启动 uvicorn（工作目录 = 项目根）
  *  3. 等待健康检查通过后，创建 Electron 窗口加载前端
  *  4. 窗口关闭时，仅结束"本客户端拉起的"后端进程（外部已有后端不动）
@@ -145,7 +145,7 @@ async function ensureBackend() {
     const detail = String(err.stderr || err.message || err);
     const conflict = detail.match(/Port (\d+) is occupied by another service or checkout/);
     dialog.showErrorBox('无法启动 GIS 工作台', conflict
-      ? `端口 ${conflict[1]} 已被其他项目或另一份仓库占用。\n\n请先关闭占用该端口的服务，再重新启动。工作台默认使用 8000。\n\n如需使用其他端口，请明确设置 GIS_PORT。`
+      ? `端口 ${conflict[1]} 已被其他项目或另一份仓库占用。\n\n请先关闭占用该端口的服务，再重新启动。工作台默认使用 8010。\n\n如需使用其他端口，请明确设置 GIS_PORT。`
       : `无法检查后端端口，请确认 Python 和 GIS_PORT 配置。\n\n${detail.trim().split('\n').pop()}`);
     return false;
   }

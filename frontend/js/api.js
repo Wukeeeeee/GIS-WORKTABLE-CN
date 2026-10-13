@@ -3,7 +3,7 @@
  * 函数签名已预留，实现由你完成
  *
  * 使用: window.GIS.api.xxx()
- * BASE_URL: http://localhost:8000
+ * BASE_URL: http://localhost:8010
  */
 
 
@@ -97,7 +97,7 @@ window.GIS.api = (() => {
     if (typeof window !== 'undefined' && window.location && window.location.origin && window.location.protocol.startsWith('http')) {
       return window.location.origin;
     }
-    return 'http://localhost:8000';
+    return 'http://localhost:8010';
   })();
 
   // ============================================================

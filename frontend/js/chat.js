@@ -1093,7 +1093,7 @@ if (typeof marked !== 'undefined') {
             const imgType = typeof item === 'string' ? (imgUrl.match(/\.html?$/i) ? 'html' : 'png') : (item.type || 'png');
             const htmlContent = typeof item === 'string' ? null : (item.content || null);
             const fileName = (item && item.name) || imgUrl.split('/').pop() || 'file';
-            const baseUrl = (window.GIS && window.GIS.api && window.GIS.api.BASE_URL) || 'http://localhost:8000';
+            const baseUrl = (window.GIS && window.GIS.api && window.GIS.api.BASE_URL) || 'http://localhost:8010';
             const fullUrl = imgUrl.startsWith('http') ? imgUrl : (baseUrl + imgUrl);
 
             // 【防重机制】：如果气泡内已经存在该产物卡片或同名图片，不重复创建
@@ -1671,7 +1671,7 @@ if (typeof marked !== 'undefined') {
       // 显示错误消息
       var _errMsg = (err && err.message) ? err.message : String(err);
       if (_errMsg === 'Failed to fetch' || _errMsg.indexOf('ERR_CONNECTION') >= 0 || _errMsg.indexOf('NetworkError') >= 0) {
-        addMessage('无法连接到后端服务，请确认后端已启动（默认地址 127.0.0.1:8000）。可在项目目录运行 start.bat 或 uvicorn backend.main:app --host 127.0.0.1 --port 8000', 'system');
+        addMessage('无法连接到后端服务，请确认后端已启动（默认地址 127.0.0.1:8010）。可在项目目录运行 start.bat 或 uvicorn backend.main:app --host 127.0.0.1 --port 8010', 'system');
       } else {
         addMessage('请求失败: ' + _errMsg, 'system');
       }
@@ -1726,7 +1726,7 @@ if (typeof marked !== 'undefined') {
     if (!contentEl || contentEl._outputBtnsAttached) return false;
     contentEl._outputBtnsAttached = true;
 
-    var baseUrl = (window.GIS && window.GIS.api && window.GIS.api.BASE_URL) || 'http://localhost:8000';
+    var baseUrl = (window.GIS && window.GIS.api && window.GIS.api.BASE_URL) || 'http://localhost:8010';
     var pathRe = /(?:\/?)(?:output|cache|uploads|downloads)\/[A-Za-z0-9_\-\u4e00-\u9fa5.\/()（）]+?\.(?:geojson|json|csv|shp|zip|png|jpe?g|html?|tiff?|kml|kmz|gpkg|gpx|dxf)/g;
 
     // 1. 查找是否存在「结果真实性自检」免责声明块，自检段落内的探针或不存在路径必须排除
