@@ -83,9 +83,18 @@ window.GIS = window.GIS || {};
   let clickHandler = null;
   let basemap = 'satellite'; // 当前 3D 底图：satellite | street | dark
 
-  const ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-  const ESRI_STREET = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
-  const DARK_MAP = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  // CN 底图源（合规白名单）：高德影像默认（免 Key、纯影像）；天地图需 tk（官方口径、CGCS2000）
+  const AMAP_IMAGERY = 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}';
+  const AMAP_VECTOR = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+  const TDT_IMAGERY = 'https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tk}';
+  const TDT_ANNOTATION = 'https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tk}';
+
+  function getTdtTk() {
+    try {
+      const creds = JSON.parse(localStorage.getItem('gis_geo_credentials') || '{}');
+      return (creds.tianditu && creds.tianditu.api_key) || '';
+    } catch (e) { return ''; }
+  }
 
   /** 按需渲染：requestRenderMode 下实体属性/材质变更必须显式触发一帧 */
   function requestRender() {
@@ -410,9 +419,9 @@ window.GIS = window.GIS || {};
         b.addEventListener('click', onclick);
         return b;
       };
-      frag.appendChild(mkBtn('m3dBmSat', '影像', 'Esri 影像底图', function() { setBasemap('satellite'); }));
-      frag.appendChild(mkBtn('m3dBmStreet', '街道', 'Esri 街道底图', function() { setBasemap('street'); }));
-      frag.appendChild(mkBtn('m3dBmDark', '深色', 'Esri 深灰地图', function() { setBasemap('dark'); }));
+      frag.appendChild(mkBtn('m3dBmSat', '影像', '高德卫星影像底图（免 Key）', function() { setBasemap('satellite'); }));
+      frag.appendChild(mkBtn('m3dBmStreet', '矢量', '高德矢量底图（免 Key）', function() { setBasemap('street'); }));
+      frag.appendChild(mkBtn('m3dBmDark', '天地图', '天地图影像+官方注记（需 tk，未配置自动回落高德）', function() { setBasemap('tdt'); }));
       const divider = document.createElement('div');
       divider.className = 'map-ctrl-divider m3d-3dbtn m3d-keep';
       frag.appendChild(divider);
@@ -577,15 +586,37 @@ window.GIS = window.GIS || {};
     if (!viewer) return;
     basemap = key;
     viewer.imageryLayers.removeAll(true);
-    if (key === 'satellite' || key === 'street' || key === 'dark') {
+    let tk = '';
+    if (key === 'tdt') {
+      tk = getTdtTk();
+      if (!tk) {
+        // 无 tk 回落高德影像并提示
+        console.warn('[CN] 天地图 tk 未配置，已回落高德影像底图');
+        key = 'satellite';
+      }
+    }
+    if (key === 'satellite' || key === 'street') {
       viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
-        url: key === 'dark' ? DARK_MAP : (key === 'street' ? ESRI_STREET : ESRI_IMAGERY),
-        credit: 'Tiles © Esri',
+        url: key === 'street' ? AMAP_VECTOR : AMAP_IMAGERY,
+        subdomains: ['1', '2', '3', '4'],
+        credit: '© 高德地图',
+      }));
+    } else if (key === 'tdt') {
+      viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+        url: TDT_IMAGERY,
+        subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+        credit: '© 天地图',
+      }));
+      // 叠加官方注记层（边界/地名为官方口径）
+      viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+        url: TDT_ANNOTATION,
+        subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+        credit: '© 天地图',
       }));
     }
     // 瓦片尚未到达时的球体基色。
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b1020');
-    const bmIds = { satellite: 'm3dBmSat', street: 'm3dBmStreet', dark: 'm3dBmDark' };
+    const bmIds = { satellite: 'm3dBmSat', street: 'm3dBmStreet', tdt: 'm3dBmDark' };
     Object.keys(bmIds).forEach(function(k) {
       const el = document.getElementById(bmIds[k]);
       if (el) el.classList.toggle('active', k === key);
@@ -777,8 +808,7 @@ window.GIS = window.GIS || {};
       const toolbar3d = document.getElementById('mapZoomControls');
       if (toolbar3d) {
         toolbar3d.classList.add('mode-3d');
-        ['m3dBmSat', 'm3dBmStreet', 'm3dBmDark'].forEach(function(id) {
-          const el = document.getElementById(id);
+        ['m3dBmSat', 'm3dBmStreet', 'm3dBmDark'].forEach(function(id) {          const el = document.getElementById(id);
           if (el) el.classList.toggle('active',
             (id === 'm3dBmSat' && basemap === 'satellite') ||
             (id === 'm3dBmStreet' && basemap === 'street') ||

@@ -1,9 +1,10 @@
 /**
- * GIS AI WorkTable — 地图模块
- * Leaflet 封装，只保留 Bing 卫星底图
+ * GIS AI WorkTable — 地图模块（CN 版）
+ * Leaflet 封装。底图白名单（合规硬约束）：高德影像/矢量（免 Key）、天地图（需 tk，官方口径）。
+ * 纯影像底图不含国界线；天地图注记边界为中国官方口径。Esri/Bing/OSM 底图不在 CN 默认选项中。
  *
- * 底图: Bing 卫星（ditu.live.com 中国 CDN）
- * 数据存 WGS-84，底图也是 WGS-84，直接叠加
+ * 坐标：数据统一 WGS-84。注意高德底图为 GCJ-02，矢量叠加存在数百米级偏移（现状既有问题，
+ * 与必应中国底图同级）；配置天地图 tk（CGCS2000）后可消除偏移，建议优先使用。
  */
 
 window.GIS = window.GIS || {};
@@ -42,6 +43,24 @@ var _undoSkip = false;
   var _deleteMode = false;
 
   var TILE_URL = 'https://t1.dynamic.tiles.ditu.live.com/comp/ch/{q}?mkt=zh-CN&ur=cn&it=A&n=z&og=804&cstl=vbd';
+
+  // —— CN 底图源（合规白名单）——
+  var AMAP_IMG_URL = 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}';
+  var AMAP_VEC_URL = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+  var TDT_IMG_URL = 'https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tk}';
+  var TDT_VEC_URL = 'https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tk}';
+  var TDT_CVA_URL = 'https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tk}';
+
+  /** 读取天地图 tk（凭据设置页保存于 localStorage: gis_geo_credentials） */
+  function _getTdtTk() {
+    try {
+      var creds = JSON.parse(localStorage.getItem('gis_geo_credentials') || '{}');
+      return (creds.tianditu && creds.tianditu.api_key) || '';
+    } catch (e) { return ''; }
+  }
+
+  /** CN 卫星源轮换顺序（合规白名单） */
+  var _CN_SAT_SOURCES = ['amap', 'amap_vec', 'tdt'];
 
   /** 进入删除模式：点击已绘制的图形将其移除 */
   function _enterDeleteMode() {
@@ -151,11 +170,18 @@ var _undoSkip = false;
     });
     mapInstance.attributionControl.setPrefix('<a href="https://leafletjs.com" title="Leaflet">Leaflet</a>');
 
-    // 卫星底图（Esri / Bing 中国区 / 白底）
-    _currentBaseMap = localStorage.getItem('gis_basemap') || 'bing';
-    // 兼容旧版本存储值 'satellite'，统一迁移为 esri
-    if (_currentBaseMap === 'satellite') { _currentBaseMap = 'esri'; }
-    _satelliteSource = localStorage.getItem('gis_sat_source') || 'bing';
+    // 卫星底图（CN：高德影像/高德矢量/天地图 · intl：Esri / Bing / 白底）
+    _currentBaseMap = localStorage.getItem('gis_basemap') || 'amap';
+    // 兼容旧版本存储值，统一迁移到 CN 白名单默认
+    if (['satellite', 'esri', 'bing'].indexOf(_currentBaseMap) !== -1) { _currentBaseMap = 'amap'; }
+    if (_currentBaseMap !== 'light') {
+      var _cred0 = null;
+      try { _cred0 = JSON.parse(localStorage.getItem('gis_geo_credentials') || '{}'); } catch (e) {}
+      var _tk0 = _cred0 && _cred0.tianditu && _cred0.tianditu.api_key;
+      if (_currentBaseMap === 'tdt' && !_tk0) { _currentBaseMap = 'amap'; }
+    }
+    _satelliteSource = localStorage.getItem('gis_sat_source') || 'amap';
+    if (['amap', 'amap_vec', 'tdt'].indexOf(_satelliteSource) === -1) { _satelliteSource = 'amap'; }
     baseLayer = _createBaseLayer(_currentBaseMap);
     baseLayer.addTo(mapInstance);
     // 初始化底图开关勾选状态（白底=关闭，其余=开启）
@@ -163,7 +189,10 @@ var _undoSkip = false;
     if (swCheck) swCheck.classList.toggle('off', _currentBaseMap === 'light');
     // 同步卫星源按钮文字
     var srcLabel = document.getElementById('sat-source-label');
-    if (srcLabel) srcLabel.textContent = _satelliteSource === 'bing' ? 'Bing' : 'Esri';
+    if (srcLabel) {
+      var _srcNames = { amap: '高德影像', amap_vec: '高德矢量', tdt: '天地图', esri: 'Esri', bing: 'Bing' };
+      srcLabel.textContent = _srcNames[_satelliteSource] || _satelliteSource;
+    }
 
     // 缓存 DOM 引用，避免每次 mousemove 都 querySelector
     _coordsEl = document.querySelector('.map-coords');
@@ -416,18 +445,65 @@ var _undoSkip = false;
         noWrap: true,
       });
     }
+    if (type === 'amap') {
+      // 高德卫星影像（免 Key，纯影像无边界标注）
+      return new L.TileLayer(AMAP_IMG_URL, {
+        attribution: '&copy; 高德地图',
+        subdomains: ['1', '2', '3', '4'],
+        maxZoom: 19,
+        maxNativeZoom: 18,
+        tileSize: 256,
+      });
+    }
+    if (type === 'amap_vec') {
+      // 高德矢量底图（免 Key，中文注记；边界为高德绘制口径）
+      return new L.TileLayer(AMAP_VEC_URL, {
+        attribution: '&copy; 高德地图',
+        subdomains: ['1', '2', '3', '4'],
+        maxZoom: 19,
+        maxNativeZoom: 18,
+        tileSize: 256,
+      });
+    }
+    if (type === 'tdt') {
+      // 天地图影像 + 中文注记（需 tk；CGCS2000，与 WGS-84 数据直接叠加无偏移）
+      var tk = _getTdtTk();
+      if (!tk) {
+        // 无 tk 时回落高德影像并提示
+        console.warn('[CN] 天地图 tk 未配置，已回落高德影像底图。请在「凭据管理」配置天地图 tk。');
+        if (typeof showGlobalToast === 'function') {
+          showGlobalToast('天地图 tk 未配置，已使用高德底图（建议在凭据管理配置天地图 tk 以消除坐标偏移）');
+        }
+        return _createBaseLayer('amap');
+      }
+      var layer = new L.TileLayer(TDT_IMG_URL.replace('{tk}', tk), {
+        attribution: '&copy; 天地图',
+        subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+        maxZoom: 18,
+        tileSize: 256,
+      });
+      // 叠加官方注记层（边界/地名标注为官方口径）
+      var anno = new L.TileLayer(TDT_CVA_URL.replace('{tk}', tk), {
+        subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+        maxZoom: 18,
+        tileSize: 256,
+      });
+      layer.on('add', function() { anno.addTo(mapInstance); });
+      layer.on('remove', function() { mapInstance.removeLayer(anno); });
+      return layer;
+    }
     if (type === 'bing') {
-      // Bing 中国区卫星影像（国内访问快）
-      var layer = new L.TileLayer('', {
+      // intl 保留：Bing 中国区卫星影像（CN 白名单之外，仅显式选择时使用）
+      var layerBing = new L.TileLayer('', {
         attribution: '&copy; Microsoft, 必应地图',
         maxZoom: 19,
       });
-      layer.getTileUrl = function(coords) {
+      layerBing.getTileUrl = function(coords) {
         return TILE_URL.replace('{q}', toQuadkey(coords.x, coords.y, coords.z));
       };
-      return layer;
+      return layerBing;
     }
-    // esri (default) - Esri World Imagery（全球覆盖，需翻墙）
+    // esri - intl 保留：Esri World Imagery（境外源，CN 白名单之外）
     return new L.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
       maxZoom: 19,
@@ -449,17 +525,22 @@ var _undoSkip = false;
     if (satCheck) satCheck.classList.toggle('off', type === 'light');
   }
 
-  /** 切换卫星底图源 Esri <-> Bing */
+  /** 切换卫星底图源（CN 白名单轮换：高德影像 → 高德矢量 → 天地图） */
   function cycleSatelliteSource() {
     if (_currentBaseMap === 'light') {
       // 如果当前是白底，先切到卫星
       switchBaseMap(_satelliteSource);
       return;
     }
-    _satelliteSource = (_satelliteSource === 'esri') ? 'bing' : 'esri';
+    var idx = _CN_SAT_SOURCES.indexOf(_satelliteSource);
+    if (idx === -1) idx = 0;
+    _satelliteSource = _CN_SAT_SOURCES[(idx + 1) % _CN_SAT_SOURCES.length];
     localStorage.setItem('gis_sat_source', _satelliteSource);
     var label = document.getElementById('sat-source-label');
-    if (label) label.textContent = _satelliteSource === 'esri' ? 'Esri' : 'Bing';
+    if (label) {
+      var _srcNames = { amap: '高德影像', amap_vec: '高德矢量', tdt: '天地图', esri: 'Esri', bing: 'Bing' };
+      label.textContent = _srcNames[_satelliteSource] || _satelliteSource;
+    }
     switchBaseMap(_satelliteSource);
   }
 

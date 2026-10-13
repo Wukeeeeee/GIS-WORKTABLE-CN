@@ -26,6 +26,7 @@ import shutil
 import urllib.request
 import uuid
 from typing import Optional, Dict, Any, List, Literal
+from pathlib import Path
 
 from langchain.tools import tool
 
@@ -59,6 +60,15 @@ from backend.services.task_manager import (
     save_code, register_artifact, log_execution,
     get_latest_code,
 )
+
+def _vendor_file_uri(*parts):
+    """返回 frontend/vendor 下静态库的 file:// 绝对 URI（生成的独立 HTML 以 file 方式打开时本地加载，加载失败由页面内 CDN 回退兜底）。"""
+    try:
+        base = Path(__file__).resolve().parents[2] / "frontend" / "vendor"
+        return (base.joinpath(*parts)).as_uri()
+    except Exception:
+        return ""
+
 
 # DEM Provider（按需获取真实地表高程；不预下载全球 DEM）
 from backend.services.data_providers.errors import DataProviderError
@@ -519,25 +529,10 @@ def search_web(query: str) -> str:
     except Exception:
         content = ""
 
-    # 也搜 Yandex，结果合并
-    yandex_content = ""
-    try:
-        url = f"https://yandex.com/search/?text={query.replace(' ', '+')}"
-        yandex_content = fetch_webpage_impl(url)
-        if yandex_content.startswith("错误") or len(yandex_content) < 200:
-            yandex_content = ""
-    except Exception:
-        pass
-
-    # 合并两个结果
-    if yandex_content:
-        if content:
-            content = content + "\n\n--- Yandex 搜索结果 ---\n" + yandex_content
-        else:
-            content = yandex_content
+    # CN 版移除 Yandex 兜底：境外搜索引擎国内不可达，失败还要白耗 20 秒超时
 
     if not content:
-        return "错误：搜索失败（Bing 和 Yandex 均未返回有效结果）"
+        return "错误：搜索失败（Bing 中国未返回有效结果）"
 
     if len(content) > 6000:
         content = content[:6000] + "\n\n...(内容过长，已截断)"
@@ -1017,11 +1012,10 @@ try:
     import osmnx as _ox
     import requests, json
     _OVERPass_MIRRORS = [
-        'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-        'https://overpass.osm.ch/api/interpreter',
+        # 2026-10 校验：mail.ru 自 2026-03 返回 403（已剔除）、kumi.systems 已迁 private.coffee
         'https://overpass-api.de/api/interpreter',
-        'https://overpass.kumi.systems/api/interpreter',
-        'https://overpass.openstreetmap.ie/api/interpreter',
+        'https://overpass.private.coffee/api/interpreter',
+        'https://overpass.openstreetmap.ru/api/interpreter',
     ]
     for _url in _OVERPass_MIRRORS:
         try:
@@ -2539,7 +2533,8 @@ def create_chart(layer_name: str, chart_type: str = "bar", field: str = "",
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{chart_title}</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="{_vendor_file_uri('echarts', 'echarts.min.js')}"></script>
+<script>window.echarts || document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"><\\/script>');</script>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   html, body {{
@@ -2773,9 +2768,22 @@ def create_chart(layer_name: str, chart_type: str = "bar", field: str = "",
 
 @tool
 def download_road_network(location_name: str, network_type: str = "drive") -> str:
-    """从 OpenStreetMap 下载指定城市/区域的路网数据并加载到地图，供 network_analysis 使用。
+    """下载指定城市/区域的路网数据并加载到地图，供 network_analysis 使用（数据源 OpenStreetMap，国内网络可能超时；失败/超时会自动返回离线包等替代方案）。
 location_name: 城市名（如"北京市""广州市""上海浦东新区"），或"经度,纬度,经度,纬度"（bbox）。
 network_type: drive(车行路) walk(步行) bike(骑行) all(全部)，默认 drive。"""
+    # 比赛/展示 profile：境外在线数据源整体禁用，直接给离线方案（不白耗 120 秒超时）
+    try:
+        from backend.services.cn_profile import is_competition
+        if is_competition():
+            return (
+                f"当前为比赛/离线模式，OpenStreetMap 在线下载已禁用。\n\n"
+                f"路网数据请使用以下方式之一：\n"
+                f"1. 使用项目预置的离线路网包（cache/offline/ 目录）\n"
+                f"2. 上传路网文件（GeoJSON / Shapefile / GraphML），我会自动识别为路网图层\n"
+                f"3. 上传后告诉我，我再调用 network_analysis 分析"
+            )
+    except Exception:
+        pass
     try:
         import osmnx as ox
     except ImportError:
@@ -5254,8 +5262,10 @@ def view_3d_terrain(layer_name: str, exaggeration: float = 2.0) -> str:
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>3D Terrain</title>
 <style>body{{margin:0;overflow:hidden;background:#1a1a2e}}</style></head><body>
 {legend_html}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="{_vendor_file_uri('three', 'three.min.js')}"></script>
+<script>window.THREE || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\\/script>');</script>
+<script src="{_vendor_file_uri('three', 'OrbitControls.js')}"></script>
+<script>window.THREE && window.THREE.OrbitControls || document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\\/script>');</script>
 <script>
 var scene=new THREE.Scene();
 var cam=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.01,1000);
@@ -7222,11 +7232,11 @@ def _fetch_satellite_imagery(west, south, east, north, zoom=16, max_tiles=49, so
                 mosaic.paste(tile, ((tx - x0) * 256, (ty - y0) * 256))
         return mosaic, z, x0, y0
 
-    # 按 source 策略尝试下载
+    # 按 source 策略尝试下载（CN：国内源优先，全部为纯影像瓦片、无边界标注）
     errors = []
     sources_to_try = []
     if source == "auto":
-        sources_to_try = ["esri", "bing", "amap"]
+        sources_to_try = ["amap", "bing", "esri"]
     else:
         sources_to_try = [source]
 
@@ -8813,9 +8823,16 @@ def fetch_gis_data_url(
 
 @tool
 def search_global_entities(query: str, lang: str = "zh") -> str:
-    """全球开放地理实体与维基百科知识图谱检索（免 Key、全球覆盖）。
+    """全球开放地理实体与维基百科知识图谱检索（免 Key、全球覆盖）。注意：依赖境外服务（Wikidata），国内网络不可用；且境外实体数据的行政区划/国家标签口径不符合中国官方标准，CN 版默认不启用。
     检索全球任意国家、山川河流、地标名胜、岛屿、行政区划，提取 Wikidata 经纬度坐标、实体定义与维基百科简介。
     用户查询全球地理实体或问"XX 在哪里/XX 的百科信息"时调用。"""
+    try:
+        from backend.services.cn_profile import is_cn
+        if is_cn():
+            return ("该功能依赖境外数据源（Wikidata/Wikipedia），国内网络不可用，且其行政区划标注口径不符合中国官方标准，已停用。\n"
+                    "国内地点请改用 amap_geocode（定位）、datav_boundary（行政边界）或 cn_aoi_search（POI/轮廓）。")
+    except Exception:
+        pass
     from backend.services import global_geo_service as ggs
     try:
         results = ggs.search_wikidata_entities(query, lang=lang, limit=5)
@@ -8842,10 +8859,17 @@ def search_global_entities(query: str, lang: str = "zh") -> str:
 
 @tool
 def fetch_osm_boundary_or_features(query: str, feature_type: str = "boundary", bbox: str = "", limit: int = 200, auto_render: bool = True) -> str:
-    """全球开放街道地图（OSM）行政区划多边形边界与矢量要素极速抽取（免 Key）。
+    """全球开放街道地图（OSM）行政区划多边形边界与矢量要素抽取（免 Key）。注意：依赖境外服务（Nominatim/Overpass），国内网络不可用；且 OSM 行政边界画法不符合中国官方标准，CN 版默认停用。
     query: 地名（如 'Taiwan', 'Tokyo', 'Paris'）；feature_type: boundary（行政边界）/ roads（道路网）/ buildings（建筑物）/ water（水系）；
     bbox: 可选空间范围；limit: 要素上限；auto_render: 是否自动上图（默认 True）。
     用户需要拉取全球任意区域边界或 OSM 矢量时调用。"""
+    try:
+        from backend.services.cn_profile import is_cn
+        if is_cn():
+            return ("该功能依赖境外数据源（OSM/Overpass/Nominatim），国内网络不可用，且 OSM 行政边界画法不符合中国官方标准，已停用。\n"
+                    "中国行政边界请改用 datav_boundary（省/市/区县）；路网请使用离线路网包或上传文件。")
+    except Exception:
+        pass
     from backend.services import global_geo_service as ggs
     try:
         init_temp_dir()
@@ -9028,6 +9052,15 @@ tools = [
     search_global_entities,
     fetch_osm_boundary_or_features,
 ]
+
+# —— CN profile 工具闸门：境外边界/实体数据源不进 Agent 视野（合规硬约束）——
+try:
+    from backend.services.cn_profile import disabled_tool_names as _cn_disabled_tools
+    _disabled = _cn_disabled_tools()
+    if _disabled:
+        tools = [t for t in tools if (getattr(t, "name", None) or getattr(t, "__name__", "")) not in _disabled]
+except Exception:
+    pass
 
 # ============================================================
 # 工具执行历史：在 tools 列表出口统一包装记录（工具本体零侵入）

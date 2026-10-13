@@ -36,10 +36,11 @@ from backend.services.data_providers.models import (
 
 # Overpass 官方/社区公开镜像（https://wiki.openstreetmap.org/wiki/Overpass_API）
 OVERPASS_ENDPOINTS = [
+    # 2026-10 校验：mail.ru 自 2026-03 返回 403（已剔除）、kumi.systems 已迁 private.coffee
+    # 支持 GIS_OVERPASS_ENDPOINT 环境变量指向本地离线服务（见 cn_profile.offline_dir）
     "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-    "https://overpass.osm.jp/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
 ]
 
 # 每类要素的 Overpass 选择器

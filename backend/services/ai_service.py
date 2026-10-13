@@ -128,7 +128,7 @@ _GLM_ROUTER_PROMPT = """你是一个技能路由分析器。分析用户的请�
 - geopandas：需要空间分析、矢量数据操作、坐标转换时
 - shapely：需要几何操作（缓冲区、相交、合并等）时
 - amap：需要搜索 POI、查天气、地理编码、逆地理编码等高德地图数据时
-- road_network：需要获取道路网络、路网分析、道路统计时（用 OSMnx + Overpass 多镜像自动切换；注意 OSM 中国数据不完整，城市可接受，乡村缺失）
+- road_network：需要获取道路网络、路网分析、道路统计时（优先使用用户上传/离线路网数据；在线下载依赖 OSM，国内网络可能超时，超时会自动给出离线包等替代方案）
 
 ===== GIS 专业知识库（结构化方法指导，优先于普通技能）=====
 - gis_basics：GIS 基础概念、标准处理流程、空间关系选择、数据质量检查（任何 GIS 任务均可参考）
@@ -280,7 +280,7 @@ SYSTEM_PROMPT = """你是一个GIS WorkTable内置AI助手（多模型协作）�
   - **优先用专用工具**：amap_geocode / amap_poi_search / datav_boundary / network_analysis / download_road_network / cn_aoi_search / cn_aoi_extract / create_heatmap / create_chart / field_calculate / measure_area / measure_distance / layer_control
   - **图层面积与距离测算必须直接调用工具**：用户要求计算指定图层的面积（如“算一下XX图层的面积”），**必须立刻调用 measure_area(layer_name="...")**；用户要求测量距离时，**必须立刻调用 measure_distance**。**绝对严禁输出口头叙述（如“我先确认一下图层...请稍等，我来调用工具...(正在查询...)”）而不实际发出工具调用！必须直接发起工具调用获取结果后直接回答数值！**
   - **地理编码/坐标查询必须调用 amap_geocode 工具**：用户询问"XX在哪""XX的坐标""XX经纬度""定位XX"等问题时，必须先调用 amap_geocode 获取真实坐标，禁止凭模型记忆直接返回坐标数值。反向地理编码用 reverse_geocode，批量用 batch_geocode。
-  - **国内建筑/场所/AOI轮廓必须用 cn_aoi_search + cn_aoi_extract（百度地图）**：用户要求提取建筑、商场、学校、机场、公园等场所轮廓时，必须先调用 cn_aoi_search 搜索候选，等用户选择后再用 cn_aoi_extract 提取边界。百度提取失败时如实告诉用户"暂时无法获取该地点轮廓"，**禁止**用 osmnx/OSM 或其他方式自行估算、绘制近似边界。osmnx 仅用于路网下载和国外行政边界。
+  - **国内建筑/场所/AOI轮廓必须用 cn_aoi_search + cn_aoi_extract（百度地图）**：用户要求提取建筑、商场、学校、机场、公园等场所轮廓时，必须先调用 cn_aoi_search 搜索候选，等用户选择后再用 cn_aoi_extract 提取边界。百度提取失败时如实告诉用户"暂时无法获取该地点轮廓"，**禁止**用 osmnx/OSM 或其他方式自行估算、绘制近似边界。境外数据源（OSM/Wikidata 等）在国内网络不可用且边界口径不符合官方标准，不可用时如实告知用户，禁止编造或用近似数据冒充。
   - **国内行政区划边界必须用 datav_boundary**：用户要求获取省/市/区/县行政边界时，必须调用 datav_boundary 工具。如果 datav_boundary 返回空或失败，如实告诉用户"暂时无法获取该行政区划边界"，**禁止**用 osmnx/OSM 或 execute_python 自行估算、绘制近似边界。
   - **execute_python 使用边界与严禁甩代码原则**：
     ① 对已有专用工具的操作（地理编码、行政边界、缓冲区、网络分析等），禁止用 execute_python 代替。
@@ -416,7 +416,7 @@ SYSTEM_PROMPT = """你是一个GIS WorkTable内置AI助手（多模型协作）�
   不要只返回原始数据或说"已完成"，要给出专业解读。
 
  ### 国外地点
-  - 国外边界用 execute_python 调 osmnx（Overpass 镜像）获取
+  - 国外边界/矢量数据依赖境外服务（OSM/Overpass），国内网络下不可用：失败时如实告知"暂时无法获取"，禁止编造或用近似数据冒充
   - 搜索国外内容时用当地语言和英文搜关键词
   - 不要用高德 POI 搜索国外地点（只覆盖中国）
 
