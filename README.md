@@ -2,14 +2,47 @@
   <img src="frontend/assets/logo-readme.png" alt="GIS WorkTable" width="320">
 </p>
 
-# GIS WorkTable
+# GIS WorkTable（中国大陆网络版 / GIS-WORKTABLE-CN）
+
+> **本仓是 [GIS-WORKTABLE](https://github.com/Wukeeeeee/GIS-WORKTABLE) 的中国大陆网络适配发行版**，主仓为国际版；本仓在其基础上加入"国内网络兜底层"，其余功能与上游完全一致，并定期从主仓同步。
 
 结合自然语言 AI Agent 与手动工具的开源 GIS 工作台，用于空间数据处理、分析及 2D/3D 地图可视化。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](backend/requirements.txt)
 
-[快速开始](#快速开始) · [功能说明](docs/features.md) · [架构](docs/architecture.md) · [参与贡献](CONTRIBUTING.md) · [更新日志](CHANGELOG.md)
+[快速开始](#快速开始) · [CN 适配说明](#中国大陆网络适配) · [功能说明](docs/features.md) · [架构](docs/architecture.md) · [参与贡献](CONTRIBUTING.md) · [更新日志](CHANGELOG.md)
+
+## 中国大陆网络适配
+
+本版针对无 VPN / 无代理 / 离线比赛场景做了系统性的兜底设计，原则：**国内源开箱即用（零 API Key），境外源默认不作为依赖，地图合规为硬约束**。
+
+| 适配项 | 说明 |
+| --- | --- |
+| **前端静态库全量本地化** | Leaflet/Marked/Draw/Heat/VectorGrid/Cesium 等全部内置于 `frontend/vendor/`（npmmirror 官方包），断网/受限网络下 UI 与 3D 正常启动 |
+| **底图白名单（合规硬约束）** | 2D/3D 默认高德卫星影像（免 Key、纯影像无边界标注），可轮换高德矢量；配置天地图 tk（凭据管理 → 天地图）后切换天地图影像+官方中文注记（CGCS2000，与 WGS-84 数据直接叠加无偏移）。国界线"要么不画、画则官方口径" |
+| **境外源合规闸门** | Agent 工具注册表按 profile 过滤：Wikidata 实体检索、OSM 行政边界抓取在 CN 档默认不注册（境外边界口径数据不进入分析结果）；比赛档（`GISWTB_PROFILE=competition`）进一步禁用 OSM 在线路网下载，改走离线包 |
+| **地理编码国内兜底** | 数据发现的地名→bbox 解析优先走 DataV 行政边界（免 Key、国内直连，含 GCJ-02→WGS-84 纠偏），Nominatim 仅作国际档回退 |
+| **离线数据包** | `python scripts/prefetch_offline.py` 预热全国 34 省级行政边界缓存（可选 `--with-cities` 预热全部地级市），DEM/路网/影像子集按 AOI 预下载至 `cache/offline/` |
+| **降级链路** | 国内源直连 → 本地缓存 → 离线数据包 → 明确中文报错；AI 提示词层同步改写：境外源不可用时如实告知、禁止编造 |
+
+### 环境画像（profile）
+
+`GISWTB_PROFILE` 环境变量（默认 `cn`）：
+
+| 取值 | 行为 |
+| --- | --- |
+| `cn` | 默认。国内源优先；境外边界/实体工具不注册；路网等纯数据工具保留（失败自动降级） |
+| `competition` | 比赛/展示模式。所有境外在线数据工具禁用，仅离线包 + 国内源 |
+| `intl` | 与主仓国际版行为一致 |
+
+### 与主仓的关系
+
+- 主仓（国际版）照常演进，本仓定期同步：`git fetch upstream && git merge upstream/main`
+- 本仓只承载 CN 特化改动（vendor 本地化、底图 registry、工具闸门、提示词改写、离线包机制）
+- 注意：高德底图为 GCJ-02，与 WGS-84 矢量叠加存在数百米级偏移；正式展示建议配置天地图 tk
+
+---
 
 ## 项目用途
 
