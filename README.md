@@ -2,93 +2,155 @@
   <img src="frontend/assets/logo-readme.png" alt="GIS WorkTable" width="320">
 </p>
 
-# GIS WorkTable（中国大陆网络版 / GIS-WORKTABLE-CN）
+# GIS WorkTable-CN
 
-> **本仓是 [GIS-WORKTABLE](https://github.com/Wukeeeeee/GIS-WORKTABLE) 的中国大陆网络适配发行版**，主仓为国际版；本仓在其基础上加入"国内网络兜底层"，其余功能与上游完全一致，并定期从主仓同步。
-
-结合自然语言 AI Agent 与手动工具的开源 GIS 工作台，用于空间数据处理、分析及 2D/3D 地图可视化。
+结合自然语言 AI Agent 与手动工具的开源 GIS 工作台，用于空间数据处理、空间分析及 2D/3D 地图可视化。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](backend/requirements.txt)
 
-[快速开始](#快速开始) · [CN 适配说明](#中国大陆网络适配) · [功能说明](docs/features.md) · [架构](docs/architecture.md) · [参与贡献](CONTRIBUTING.md) · [更新日志](CHANGELOG.md)
-
-## 中国大陆网络适配
-
-本版针对无 VPN / 无代理 / 离线比赛场景做了系统性的兜底设计，原则：**国内源开箱即用（零 API Key），境外源默认不作为依赖，地图合规为硬约束**。
-
-| 适配项 | 说明 |
-| --- | --- |
-| **前端静态库全量本地化** | Leaflet/Marked/Draw/Heat/VectorGrid/Cesium 等全部内置于 `frontend/vendor/`（npmmirror 官方包），断网/受限网络下 UI 与 3D 正常启动 |
-| **底图白名单（合规硬约束）** | 2D/3D 默认高德卫星影像（免 Key、纯影像无边界标注），可轮换高德矢量；配置天地图 tk（凭据管理 → 天地图）后切换天地图影像+官方中文注记（CGCS2000，与 WGS-84 数据直接叠加无偏移）。国界线"要么不画、画则官方口径" |
-| **境外源合规闸门** | Agent 工具注册表按 profile 过滤：Wikidata 实体检索、OSM 行政边界抓取在 CN 档默认不注册（境外边界口径数据不进入分析结果）；比赛档（`GISWTB_PROFILE=competition`）进一步禁用 OSM 在线路网下载，改走离线包 |
-| **地理编码国内兜底** | 数据发现的地名→bbox 解析优先走 DataV 行政边界（免 Key、国内直连，含 GCJ-02→WGS-84 纠偏），Nominatim 仅作国际档回退 |
-| **离线数据包** | `python scripts/prefetch_offline.py` 预热全国 34 省级行政边界缓存（可选 `--with-cities` 预热全部地级市），DEM/路网/影像子集按 AOI 预下载至 `cache/offline/` |
-| **降级链路** | 国内源直连 → 本地缓存 → 离线数据包 → 明确中文报错；AI 提示词层同步改写：境外源不可用时如实告知、禁止编造 |
-
-### 环境画像（profile）
-
-`GISWTB_PROFILE` 环境变量（默认 `cn`）：
-
-| 取值 | 行为 |
-| --- | --- |
-| `cn` | 默认。国内源优先；境外边界/实体工具不注册；路网等纯数据工具保留（失败自动降级） |
-| `competition` | 比赛/展示模式。所有境外在线数据工具禁用，仅离线包 + 国内源 |
-| `intl` | 与主仓国际版行为一致 |
-
-### 与主仓的关系
-
-- 主仓（国际版）照常演进，本仓定期同步：`git fetch upstream && git merge upstream/main`
-- 本仓只承载 CN 特化改动（vendor 本地化、底图 registry、工具闸门、提示词改写、离线包机制）
-- 注意：高德底图为 GCJ-02，与 WGS-84 矢量叠加存在数百米级偏移；正式展示建议配置天地图 tk
+[项目背景](#一项目背景) · [技术架构](#二技术架构) · [应用场景](#三应用场景) · [**创新点**](#四创新点与技术差异化) · [快速开始](#五快速开始) · [功能一览](#六功能一览与工作台预览) · [部署配置](#七数据源与部署环境配置) · [协议与依赖](#八开源协议与第三方依赖合规) · [维护者与路线图](#九维护者与路线图) · [文档索引](#十一文档索引)
 
 ---
 
-## 项目用途
+## 项目简介
 
-GIS WorkTable 将数据加载、空间分析、地图展示和结果导出放在同一工作台中。用户可以通过手动面板执行分析，也可以用自然语言让 Agent 组合 GIS 工具，并在地图上检查结果。
+GIS WorkTable-CN 把「找数据 → 空间分析 → 地图核验 → 导出成果」收进同一个工作台，并提供两条入口：**用自然语言让 AI Agent 编排工具**，或**用手动面板逐项配置**。两条入口复用同一套 GIS 工具注册表与产物通道，不存在"演示版"与"工具版"两套实现。
 
-界面采用黑白灰布局：顶部菜单、左侧首页 / 数据 / 图层 / 处理 / AI 导航、中央地图及底部工具条。首次访问默认打开首页面板，提供上手指引、一键运行样例与最近工程；后续自动记忆上次打开的面板与收起状态。AI 助手默认收起，各侧面板可关闭、重新打开，并通过与地图之间的分隔条调整宽度。全球数据地图在中央工作区打开，可返回原地图且保持当前状态；经纬度显示在底部状态栏。2D 与 3D 使用同一组工作台入口；在线服务是否可接入取决于协议、服务权限与可用性。
+分析过程中，图层、属性与处理历史始终可见可查；2D（Leaflet）与 3D（CesiumJS）共享同一份图层状态，切换视图不丢上下文。结果可导出为 Shapefile / GeoJSON，交给 QGIS 或 ArcGIS 继续处理。
 
-适合 GIS 学习、空间分析原型验证和工作流演示。项目持续开发中；桌面客户端为实验性功能，分析结果需要结合数据质量、坐标系和方法适用性核验。
+工程不依赖云端构建，前端为原生 HTML/CSS/JS，第三方库随仓库分发，**离线或内网环境可直接启动**；数据源与服务地址可按需配置（见[第七节](#七数据源与部署环境配置)）。
 
-## 工作台预览
+界面采用黑白灰布局：顶部菜单、左侧首页 / 数据 / 图层 / 处理 / AI 导航、中央地图及底部工具条。首次访问默认打开首页面板，提供上手指引与一键运行样例；后续自动记忆上次打开的面板与收起状态。AI 助手默认收起，各侧面板可关闭、重新打开，并通过与地图之间的分隔条调整宽度。
 
-![GIS WorkTable：图层侧面板与卫星底图上的实心点](docs/images/worktable.png)
+---
 
-上图使用内置矩形和点样例。地图点要素使用与图层颜色一致的实心圆点和细白边，便于在卫星影像上辨认；界面 Logo 和工具图标使用 PNG / CSS，地图矢量使用 Canvas。
+## 一、项目背景
 
-空间分析、统计和栅格等工具窗口可通过右下角拖动调整宽高，支持折叠和关闭。窄窗口的分析标签换行显示；运行状态、返回结果和失败原因显示在当前工具面板中。已验证的操作及尚未验证的范围见 [工具验证记录](docs/tool-validation.md)，本轮用户可见更新见 [更新日志](CHANGELOG.md)。
+现有 GIS 工作流存在三个断点，本项目逐一对应解决：
 
-## 主要能力
-
-| 能力 | 内容 | 使用条件 |
+| 断点 | 具体表现 | 本项目的解法 |
 | --- | --- | --- |
-| 手动 GIS 操作 | 图层管理、绘制、测量、缓冲、叠置、符号化、属性编辑、处理历史与重跑 | 本地分析无需模型 API Key |
-| AI Agent | 自然语言任务规划、多轮实体继承、行动优先（免问卷式过度追问）、单区指标看板与多区分级设色自适应、未执行代码推脱拦截 | 配置兼容 OpenAI 接口的模型服务（如 DeepSeek、GLM、Agnes 等） |
-| 2D/3D 地图 | Leaflet / CesiumJS 共享图层状态，行政区下钻、面要素拉伸展示，轻量全局 Toast 操作反馈 | 底图和在线边界服务需要网络 |
-| 栅格与空间统计 | 地形分析、遥感指数、插值、自相关、热点与网络分析 | 对应输入数据；部分工具需要在线数据 |
-| 数据接入 | 文件导入、GeoSource 目录检索、OGC/ArcGIS 服务、云原生格式 | 数据库快照、服务可用性及授权因来源而异 |
-| 工程与互通 | 工程保存与恢复（.giswork）、图层导出（Shapefile/GeoJSON 兼容 QGIS 与 ArcGIS）、地图及报告导出、DAG 工作流、stdio MCP Server | MCP 接入见专门文档 |
+| **操作门槛高** | 缓冲区、叠置、插值等分析需要逐面板配置参数，学习成本高；初学者更习惯用自然语言表达需求 | 自然语言任务编排：Agent 直接组合调用已注册的 GIS 工具 |
+| **AI 结果不可核查** | 把 LLM 直接接上 GIS 工具后，"AI 说它做了"不等于"文件真的生成了"；多轮对话中的历史同名文件还会造成假阳性误判 | 产物三方核对（`Claim ↔ Registry ↔ Filesystem`）+ `run_id` 单次执行隔离 |
+| **部署环境不可控** | 教学机房、演示现场、内网环境往往没有稳定的网络连接；在线服务一断，整个工具链就停摆 | 前端依赖随仓分发 + 本地缓存 + 离线数据包 + 明确的降级链路 |
 
-完整清单见 [功能说明](docs/features.md)。工具以源代码注册表为准；数据目录的数量与探活结果以实际数据库快照为准。
+---
 
-## 快速开始
+## 二、技术架构
+
+### 架构图
+
+```mermaid
+flowchart LR
+    subgraph 前端[前端 frontend/ 原生 HTML/JS]
+        UI[工作台 UI<br/>Leaflet 2D / CesiumJS 3D]
+        STATE[gis_state.js<br/>图层/选中/下钻 唯一状态源]
+        VENDOR[frontend/vendor/<br/>随仓分发的第三方库]
+        UI --> STATE
+    end
+
+    subgraph 后端[后端 backend/ FastAPI]
+        API[main.py<br/>/api/chat /api/chat/stream<br/>/api/tools/invoke /api/layer/*]
+        AGENT[graph.py<br/>LangGraph create_react_agent<br/>+ Verifier 自校验]
+        TOOLS[tools.py<br/>GIS 工具注册表 @tool<br/>_recorded 统一执行记录]
+        GATE[cn_profile.py<br/>GISWTB_PROFILE 档位]
+        LEDGER[storage_service.py<br/>data/workspace.db<br/>runs + run_artifacts 台账]
+        API --> AGENT --> TOOLS
+        GATE --> TOOLS
+        TOOLS --> LEDGER
+    end
+
+    subgraph 数据[数据与知识]
+        GS[data/gis_services.db<br/>GeoSource 服务目录]
+        KN[knowledge/ GIS 方法知识模块]
+        OFF[cache/offline/<br/>离线数据包]
+    end
+
+    UI -- SSE/JSON --> API
+    TOOLS --> GS
+    AGENT -.提示词.-> KN
+    TOOLS --> OFF
+    STATE -.pending_state 产物通道.-> TOOLS
+```
+
+### 关键机制
+
+- **前端单一状态源**：`frontend/js/gis_state.js` 统一管理图层、选中要素与下钻栈，2D / 3D 与 UI 面板订阅同一状态，保证两个视图一致。
+- **Agent 执行链路**：`backend/main.py` 的 `/api/chat/stream` → `graph.py:run_agent_stream()` → LangGraph `create_react_agent` 自动路由到 `tools.py` 中被 `_recorded()` 包装的注册工具 → 产物写入 `pending_state` → Verifier 自校验与 `result_guard` 三方核对（声明的产物 ↔ 工具注册表 ↔ 磁盘文件）→ `storage_service` 落台账。
+- **执行台账**：`data/workspace.db` 记录每次 run 与产物关联；产物存相对路径，迁移目录后可自愈解析；基于 `run_id` 的单次执行隔离防止历史同名文件造成"未执行却报成功"。
+- **重活不阻塞事件循环**：工程加载 / 保存、Shapefile 导出、逆地理编码等同步重活统一经 `asyncio.to_thread` 移出事件循环；状态锁使用 `RLock`，避免 `reset_registered_layers` 持锁内调用 `_register_layer` 造成自死锁。
+
+### 目录结构
+
+```text
+backend/       FastAPI 入口、Agent、GIS 工具、数据连接器、pytest 测试
+frontend/      原生 HTML/CSS/JS、Leaflet 与 CesiumJS（无构建步骤）
+desktop/       Electron 桌面外壳（实验性）
+knowledge/     GIS 方法与知识模块
+skills/        项目内 GIS 领域提示文档（不是 Codex skill 安装目录）
+data/          GeoSource SQLite 数据库快照
+docs/          功能、架构、协作规范与发布文档
+```
+
+详见 [架构与模块](docs/architecture.md)。
+
+---
+
+## 三、应用场景
+
+| 目标用户 | 应用场景 | 在本项目中的落地方式 |
+| --- | --- | --- |
+| **GIS 本科生 / 研究生** | 课程作业、毕业设计中的空间分析原型验证 | 用自然语言完成分析，无需先记住面板路径；结果与属性可直接目检 |
+| **教学与演示现场** | 机房、会场等网络受限环境 | 前端依赖随仓分发 + 离线数据包，断网可启动 |
+| **空间数据工作者** | 快速检索数据目录、批量缓冲 / 叠置、结果交给 QGIS / ArcGIS 继续处理 | GeoSource 服务目录检索；结果导出 Shapefile / GeoJSON |
+| **规划与应急原型** | 选址缓冲、服务区与可达性、热点识别、遥感指数初筛 | 缓冲 / 叠置 / 网络分析 / 热点分析 / 遥感指数工具链 |
+| **遥感与地形初筛** | DEM 地形分析、NDVI 等指数快速核查 | GeoTIFF 上传或在线高程获取；栅格与空间统计工具 |
+
+---
+
+## 四、创新点与技术差异化
+
+| 创新点 | 解决的问题 | 实现与验证 |
+| --- | --- | --- |
+| **手动与 AI 复用同一工具注册表与产物通道** | 消除"演示版"与"工具版"两套实现的不一致 | `tools.py` 单一注册表，`/api/tools/invoke` 与聊天链路调用同一函数；Layer 3/4/5 集成测试覆盖 |
+| **产物三方核对（Claim ↔ Registry ↔ Filesystem）+ `run_id` 隔离** | 杜绝"AI 未真实执行却报成功"的假阳性 | `storage_service.py` + `result_guard.py` 核对声明产物、工具注册表与磁盘文件；安全测试覆盖 |
+| **执行台账 + 相对路径自愈** | 更换磁盘或移动项目目录后，历史分析轨迹仍可解析 | `data/workspace.db` 的 `runs` / `run_artifacts` 表统一落账 |
+| **五层分层测试体系** | 改动后能分层验证，测试不与 GIS 主系统割裂 | 单元 / Agent 决策 / GIS 工具集成 / 地图图层通道 / E2E；`scripts/run_layered_tests.py`，`backend/tests/` 565 个测试函数 |
+| **前端依赖随仓分发** | 网络受限环境下无法加载 CDN 资源 | `frontend/vendor/` 内置 Leaflet / CesiumJS / ECharts 等，零 CDN 引用 |
+| **部署档位 `GISWTB_PROFILE`** | 不同网络条件下数据源可用性不一致 | `backend/services/cn_profile.py` 按档位注册可用数据源 |
+| **底图与注记数据源白名单** | 行政边界与地图注记需符合国家地图表达规范 | 2D `frontend/js/map.js`、3D `frontend/js/renderer_cesium.js` |
+| **地名解析与坐标纠偏** | GCJ-02 与 WGS-84 混用造成数百米级偏移 | `datav_boundary` 工具；Layer 3 测试覆盖南京市鼓楼区案例 |
+| **离线数据包预热** | 断网环境下需要可用的基础地理数据 | `scripts/prefetch_offline.py` 预热省级行政边界缓存 |
+
+### 与同类方案的差异
+
+| 维度 | 传统桌面 GIS（QGIS / ArcGIS 类） | 通用 LLM + 代码沙箱 | 本项目 |
+| --- | --- | --- | --- |
+| 分析入口 | 手动面板为主，需逐项配置 | 自然语言，但工具能力依赖临时生成代码 | 自然语言与手动面板复用同一 GIS 工具注册表 |
+| 结果可核查 | 依赖人眼核对 | 依赖模型自述，产物缺少独立核对 | 声明 / 注册表 / 磁盘三方核对 + `run_id` 隔离 |
+| 网络受限环境 | 本地为主，在线插件多依赖外部服务 | 多依赖外部 CDN 与 API | 前端依赖随仓分发 + 本地缓存 + 离线数据包 |
+| 部署与协议 | 商业许可或 GPL 系 | 视实现而定 | MIT，依赖与数据源合规声明明确（见第八节） |
+
+---
+
+## 五、快速开始
 
 ### 环境要求
 
+- **已实测环境：Windows 11 + Python 3.13**（macOS / Linux 尚未实测，见[已知限制](#十已知限制)）。
 - Python 3.11+，建议使用独立虚拟环境；依赖包含地理计算库。
 - 现代浏览器；前端无需 Node.js 构建。
 - 桌面版额外需要 Node.js / npm 和 Electron 依赖。
-- 使用 AI 时需要模型服务配置；手动本地分析可先不配置模型。
+- 使用 AI 时需要模型服务配置；**手动本地分析可先不配置模型（零 API Key 即可跑通）**。
 
 ### 安装与启动
 
-以下命令在仓库根目录执行：
+在仓库根目录执行：
 
 ```bash
-git clone https://gitee.com/wukeeeeee/GIS-WORKTABLE.git
-cd GIS-WORKTABLE
+git clone https://github.com/Wukeeeeee/GIS-WORKTABLE-CN.git
+cd GIS-WORKTABLE-CN
 python -m venv .venv
 ```
 
@@ -108,16 +170,16 @@ source .venv/bin/activate
 
 ```bash
 python -m pip install -r backend/requirements.txt
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010
 ```
 
-浏览器打开 <http://127.0.0.1:8000>。开发时可在启动命令末尾添加 `--reload`。
+浏览器打开 <http://127.0.0.1:8010>。开发时可在启动命令末尾添加 `--reload`。
 
-Windows 可运行 `start.bat` 或 `scripts/start-desktop.bat`。启动器只复用当前仓库的 GIS 服务；默认固定使用 8000，冲突时报错，不自动切换端口，以保持浏览器本地存储地址稳定。可以用环境变量 `GIS_PORT` 手动指定其他端口。`scripts/stop.bat` 只停止默认端口（或 `GIS_PORT` 指定端口上）身份匹配的服务；更新前启动的旧服务请在原窗口按 Ctrl+C 关闭。
+Windows 可运行 `start.bat`（Web 版）或 `scripts/start-desktop.bat`（桌面版）。启动器只复用当前仓库的 GIS 服务，默认端口 **8010**，端口冲突时报错而不自动切换，以保持浏览器本地存储地址稳定；可用环境变量 `GIS_PORT` 手动指定其他端口。`scripts/stop.bat` 只停止默认端口（或 `GIS_PORT` 指定端口上）身份匹配的服务。
 
-Python 解释器依次选择 `GIS_PYTHON`、项目 `.venv`、PATH 中的 Python。上述手动安装命令尚未在全新环境验证，macOS / Linux 也尚未完成平台验收。
+Python 解释器依次选择 `GIS_PYTHON`、项目 `.venv`、PATH 中的 Python。
 
-### 第一次操作：不配置 AI 也可体验
+### 第一次操作
 
 1. 在地图上绘制一个面，或导入自己的 GeoJSON 文件。
 2. 在图层面板选中该图层，打开手动空间分析面板。
@@ -129,103 +191,166 @@ Python 解释器依次选择 `GIS_PYTHON`、项目 `.venv`、PATH 中的 Python�
 ### 配置
 
 - **模型服务**：设置 → AI 模型，填写 Provider、Base URL、模型名和 API Key。配置保存在浏览器 localStorage；调用 AI 时，密钥随请求发送到本地后端，由后端访问所选模型服务。
-- **外部数据源**：按需在连接器中配置账号或密钥；无需为本地手动分析配置所有数据源。
-- **GeoSource**：默认使用 `data/gis_services.db`；也可能优先读取更新时间更晚的同级 `GeoSource/gis_services.db`。可通过环境变量 `GEOSOURCE_DB_PATH` 指定已有数据库文件。目录条目不代表服务始终可用。服务目录关联项目与 MCP 集成见 [GeoSource-MCP](https://github.com/Wukeeeeee/GeoSource-MCP.git)。
+- **数据源与底图**：按需在连接器中配置账号或密钥；行政边界与底图默认使用可直连的国内服务，无需为本地手动分析配置全部数据源。
+- **GeoSource**：默认使用 `data/gis_services.db`；也可能优先读取更新时间更晚的同级 `GeoSource/gis_services.db`。可通过环境变量 `GEOSOURCE_DB_PATH` 指定已有数据库文件。目录条目不代表服务始终可用。关联项目见 [GeoSource-MCP](https://github.com/Wukeeeeee/GeoSource-MCP.git)。
 - **本地状态**：会话、任务和处理历史位于 `cache/`，生成产物位于 `output/`；清理前请保存需要保留的工程和结果。
 
-### Windows 脚本与桌面版
+### 运行测试
 
-依赖安装完成后，可使用根目录 `start.bat` 启动 Web 版，`scripts/stop.bat` 停止服务。
-
-桌面版先安装依赖，再运行 `scripts/start-desktop.bat`：
+统一入口：
 
 ```bash
-cd desktop
-npm install
-cd ..
-```
-
-桌面外壳依赖本机 Python 环境，目前仅有 Windows 人工验证。
-
-## 架构与目录
-
-```text
-backend/       FastAPI 入口、Agent、GIS 工具、数据连接器、pytest 测试
-frontend/      原生 HTML/CSS/JS、Leaflet 与 CesiumJS
-desktop/       Electron 桌面外壳
-knowledge/     GIS 方法与知识模块
-skills/        项目内 GIS 领域提示文档（不是 Codex skill 安装目录）
-data/          GeoSource SQLite 数据库快照
-docs/          功能、架构、协作规范与发布文档
-```
-
-前端使用 `frontend/js/gis_state.js` 统一管理图层、选中要素和下钻状态；手动工具与 AI 调用复用后端 GIS 工具及图层产物通道。详见 [架构与模块](docs/architecture.md)。
-
-## 开发与分层测试体系
-
-项目构建了不与 GIS 主系统割裂的 **五层分层测试体系**（覆盖单元、Agent 决策、GIS 工具集成、地图图层与 E2E 业务），详情见 [分层测试指南](docs/layered-testing-guide.md)。
-
-可使用统一测试脚本 `scripts/run_layered_tests.py` 按需分组执行：
-
-```bash
-# 1. 快速模式（~2s）：Layer 1 (单元) + Layer 2 (Agent)，适合 Prompt 或逻辑微调
+# 快速模式：Layer 1（单元）+ Layer 2（Agent 决策）
 python scripts/run_layered_tests.py --mode fast
 
-# 2. 集成模式（~6s）：Layer 3 (GIS 工具) + Layer 4 (地图图层通道)，适合空间处理修改
+# 集成模式：Layer 3（GIS 工具）+ Layer 4（地图图层通道）
 python scripts/run_layered_tests.py --mode integration
 
-# 3. 全量回归（Layer 1~5 全链路，合并前执行）：
+# 全量回归：Layer 1~5 全链路（合并前执行）
 python scripts/run_layered_tests.py --mode regression
 ```
 
-也可在仓库根目录直接运行 pytest：
+也可在仓库根目录直接运行 `python -m pytest backend/tests/ -q`。部分测试依赖外部网络或服务，跳过与失败原因按实际输出记录。
 
-```bash
-python -m pytest backend/tests/ -q
-```
+---
 
-部分测试依赖外部网络或服务，跳过与失败原因应按实际输出记录。测试数量和通过率应附执行环境、命令及提交号，不在 README 中固定写入容易过期的数字。
+## 六、功能一览与工作台预览
 
-- [分层测试指南](docs/layered-testing-guide.md)：测试架构、模块边界依赖与分层触发规范。
-- [贡献指南](CONTRIBUTING.md)：开发流程、工具扩展、验证与 PR 要求。
-- [命名与描述规范](docs/repository-standards.md)：项目名、文件名、分支、提交、Issue/PR、仓库 Description。
-- [界面与面板规范](docs/ui-guidelines.md)：黑白灰风格、左侧 AI、数据入口及面板折叠与关闭行为。
-- [更新日志](CHANGELOG.md) 与 [发布流程](docs/release-guide.md)：记录变更、版本和验证证据。
-- [参赛与项目展示准备](docs/showcase.md)：演示流程、材料清单及待核验事项。
-- 问题与建议请提交 [Issue](https://github.com/Wukeeeeee/GIS-WORKTABLE/issues)，尽量附最小复现数据。
+| 能力 | 内容 | 使用条件 |
+| --- | --- | --- |
+| 手动 GIS 操作 | 图层管理、绘制、测量、缓冲、叠置、符号化、属性编辑、处理历史与重跑 | 本地分析无需模型 API Key |
+| AI Agent | 自然语言任务规划、多轮实体继承、行动优先（免问卷式过度追问）、单区指标看板与多区分级设色自适应、未执行代码推脱拦截 | 配置兼容 OpenAI 接口的模型服务（DeepSeek、GLM、Agnes 等） |
+| 2D / 3D 地图 | Leaflet / CesiumJS 共享图层状态，行政区下钻、面要素拉伸展示，轻量全局 Toast 操作反馈 | 底图和在线边界服务需要网络 |
+| 栅格与空间统计 | 地形分析、遥感指数、插值、自相关、热点与网络分析 | 对应输入数据；部分工具需要在线数据 |
+| 数据接入 | 文件导入、GeoSource 目录检索、OGC / ArcGIS 服务、云原生格式 | 数据库快照、服务可用性及授权因来源而异 |
+| 工程与互通 | 工程保存与恢复（`.giswork`）、图层导出（Shapefile / GeoJSON，兼容 QGIS 与 ArcGIS）、地图及报告导出、DAG 工作流、stdio MCP Server | MCP 接入见 [docs/mcp_server.md](docs/mcp_server.md) |
 
-## 本地数据存储与持久化说明
+![GIS WorkTable：图层侧面板与卫星底图上的实心点](docs/images/worktable.png)
 
-- **执行台账数据库**：`data/workspace.db`（本地 SQLite）。用于记录所有 Agent 执行轮次（`runs`）、工具调用与产物关联台账。
-- **相对路径设计**：数据库内所有产物均存储为相对于工作区根目录的相对路径（如 `output/nanjing_buffer.geojson`），即便更换存放磁盘或移动项目文件夹，历史记录依然能自愈解析。
-- **防历史污染机制**：基于 `run_id` 的单次执行隔离与三方核对（Claim ↔ Registry ↔ Filesystem），杜绝多轮对话中历史同名文件造成的“未真实执行却误判成功”假阳性。
-- **备份与迁移**：迁移工作台或更换电脑时，只需完整备份 `data/` 目录与输出文件即可保留所有历史分析轨迹与图层。
+上图使用内置矩形和点样例。地图点要素使用与图层颜色一致的实心圆点和细白边，便于在卫星影像上辨认；界面 Logo 和工具图标使用 PNG / CSS，地图矢量使用 Canvas。空间分析、统计和栅格等工具窗口可通过右下角拖动调整宽高，支持折叠和关闭。
 
-## 更多文档
+---
 
-- [分层测试指南](docs/layered-testing-guide.md)
-- [AI 对话与工具延迟检查](docs/performance-audit.md)
-- [项目路线图](docs/ROADMAP.md)
-- [仓库盘点与参赛方向评估](docs/repository-audit.md)
-- [功能说明](docs/features.md)
-- [架构与模块](docs/architecture.md)
-- [MCP Server 配置](docs/mcp_server.md)
-- [手动直连工具设计说明](docs/summary_manual_direct_tools.md)
-- [3D 地球与下钻调研](docs/research_3d_globe_drilldown.md)
+## 七、数据源与部署环境配置
 
-## 已知限制与数据使用
+为适应不同网络条件，数据源按部署档位注册，并保留完整的降级链路。
 
+| 能力 | 说明 |
+| --- | --- |
+| **前端依赖随仓分发** | Leaflet / Marked / Draw / Heat / VectorGrid / Cesium 等全部内置于 `frontend/vendor/`，无 CDN 引用，离线或内网可正常启动 |
+| **底图与注记白名单** | 默认使用可直连的卫星影像底图（免 Key）；配置天地图 tk（凭据管理 → 天地图）后可切换官方中文注记底图（CGCS2000，与 WGS-84 数据直接叠加无偏移）。行政边界与地图注记采用符合国家标准的官方数据 |
+| **数据源准入** | 按档位注册可用数据源。行政边界、地名检索等默认走国内可直连服务（如 DataV 行政边界，含 GCJ-02 → WGS-84 纠偏）；离线档位仅启用本地离线包 |
+| **离线数据包** | `python scripts/prefetch_offline.py` 预热全国 34 个省级行政边界缓存（可选 `--with-cities` 预热全部地级市）；DEM / 路网 / 影像子集按 AOI 预下载至 `cache/offline/` |
+| **降级链路** | 远程源直连 → 本地缓存 → 离线数据包 → 明确中文报错；AI 提示词层同步约束：数据源不可用时如实告知、禁止编造 |
+
+### 部署档位（`GISWTB_PROFILE`）
+
+| 取值 | 行为 |
+| --- | --- |
+| `cn`（默认） | 优先使用国内可直连服务；在线数据工具失败时自动降级到本地缓存 |
+| `competition` | 演示 / 离线模式：仅启用本地离线包与已缓存数据 |
+| `intl` | 启用全部在线数据源 |
+
+---
+
+## 八、开源协议与第三方依赖合规
+
+### 本项目协议
+
+- 本项目源码采用 **[MIT License](LICENSE)**（Copyright © 2026 Wukeeeeee）。
+- 完整依赖清单见 [`backend/requirements.txt`](backend/requirements.txt)（含版本约束与"勿删"说明，例如 `openai` 为 `langchain-openai` 的传递依赖、`langgraph` 限定 1.x）。
+- 前端第三方库内置于 [`frontend/vendor/`](frontend/vendor/)，保留各自许可证与版权声明，本项目未修改其源码。
+
+### 主要依赖及许可证索引
+
+以下为上游项目公开声明，最终以各项目仓库 `LICENSE` 为准。
+
+| 依赖 | 许可证 | 用途 |
+| --- | --- | --- |
+| FastAPI | MIT | Web API 框架 |
+| uvicorn | BSD-3-Clause | ASGI 服务器 |
+| LangGraph / LangChain / langchain-core / langchain-openai | MIT | Agent 编排 |
+| MCP | MIT | 对外暴露 GIS 工具给外部 AI 客户端 |
+| Shapely / GeoPandas | BSD-3-Clause | 几何与矢量数据处理 |
+| NumPy / pandas / SciPy / scikit-learn / scikit-image | BSD-3-Clause | 数值与统计计算 |
+| Rasterio | BSD-3-Clause | 栅格读写 |
+| PyProj / pyogrio | MIT | 坐标变换与矢量 IO |
+| NetworkX | BSD-3-Clause | 网络分析 |
+| Requests | Apache-2.0 | HTTP 客户端 |
+| Playwright | Apache-2.0 | 端到端测试 |
+| Pillow | HPND | 图像处理 |
+| Matplotlib | Matplotlib (PSF-based) | 制图 |
+| pmtiles / mapbox-vector-tile | BSD-3-Clause | 云原生格式流式加载 |
+| pyecharts / markdownify / adjustText | MIT | 图表与文本转换 |
+| orjson | Apache-2.0 / MIT 双许可 | 高性能 JSON |
+| scrapling | 以仓库声明为准 | 网页抓取 |
+
+### 第三方数据与底图
+
+- 底图与影像（高德、天地图等）、行政边界（DataV 等）、服务目录（GeoSource）等第三方数据的版权归各自权利方，**不在 MIT 许可范围内**；使用和分发需遵守其来源条款。
+- 行政边界与地图注记采用符合国家标准的官方数据，符合国家地图表达规范。
+
+---
+
+## 九、维护者与路线图
+
+| 项目 | 现状 |
+| --- | --- |
+| 维护者 | [@Wukeeeeee](https://github.com/Wukeeeeee)（KaiFan Wu），GIS 专业本科生（2028 届） |
+| 组织形式 | 当前以个人维护为主；采用双仓结构——主仓承载通用能力演进，本仓承载部署环境配置与优化，两仓定期同步 |
+| 社区入口 | Issue 与 PR 见 [GitHub Issues](https://github.com/Wukeeeeee/GIS-WORKTABLE-CN/issues)；规范要求见 [CONTRIBUTING.md](CONTRIBUTING.md)、[命名与描述规范](docs/repository-standards.md) |
+| 版本与发布 | [CHANGELOG.md](CHANGELOG.md) 记录变更，[发布流程](docs/release-guide.md) 规定版本与验证证据 |
+
+### 路线图
+
+1. 桌面客户端（Electron 外壳）补齐 macOS / Linux 启停脚本与实测。
+2. 面向多用户的部署形态：身份认证、工具执行权限与数据隔离。
+3. 离线包覆盖面扩展，并为部署档位补充自动化回归测试。
+4. 引入 Issue / PR 模板与贡献者名单，逐步过渡到多人协作。
+
+详细路线图见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+
+---
+
+## 十、已知限制
+
+- 本项目仅在 **Windows 11 + Python 3.13** 完成实测；macOS / Linux 尚未实测，随仓脚本 `start.bat` / `scripts/stop.bat` 仅适用于 Windows，其他平台请按上文的 `uvicorn` 命令启动。
+- 桌面客户端仅完成 Windows 人工验证；手动安装命令尚未在全新环境完整验证。
 - 结果真实性检查核对已知文件与图层产物，不能证明分析方法或 AI 解读一定正确。
 - 卫星影像巡检采用 RGB 启发式初筛，不等同于专业遥感分类。
 - DEM 可上传 GeoTIFF，也可通过高程工具获取在线地形数据；在线获取受数据覆盖和网络影响。主地图 3D 视图与工具生成的地形预览是不同能力，不应混为一谈。
-- 遥感平台下载、POI、底图、行政边界和 OSM 数据受账号、接口、配额与第三方服务条款约束；超大数据和路网任务可能耗时较长。
+- 遥感平台下载、POI、底图、行政边界等在线数据受账号、接口、配额与第三方服务条款约束；超大数据和路网任务可能耗时较长。
 - 云原生加载中的预览、抽样或范围过滤可能只展示部分数据，需核对工具输出说明。
 - 当前默认启动方式面向本机使用；公开部署前需要单独评估身份认证、工具执行权限及数据隔离。
 
 GIS 结果仅供研究和辅助分析，不替代专业判断。软件许可证不授予第三方底图、影像或数据的额外使用权；使用和分发这些数据时应遵守来源条款。
 
+---
+
+## 十一、文档索引
+
+**架构与设计**
+
+- [架构与模块](docs/architecture.md) · [设计说明](DESIGN.md) · [功能说明](docs/features.md)
+- [MCP Server 配置](docs/mcp_server.md) · [手动直连工具设计说明](docs/summary_manual_direct_tools.md)
+- [3D 地球与下钻调研](docs/research_3d_globe_drilldown.md) · [AI 对话与工具延迟检查](docs/performance-audit.md)
+
+**开发与协作**
+
+- [分层测试指南](docs/layered-testing-guide.md) · [工具验证记录](docs/tool-validation.md)
+- [贡献指南](CONTRIBUTING.md) · [命名与描述规范](docs/repository-standards.md)
+- [界面与面板规范](docs/ui-guidelines.md) · [更新日志](CHANGELOG.md) · [发布流程](docs/release-guide.md)
+
+**规划与评估**
+
+- [项目路线图](docs/ROADMAP.md) · [仓库盘点与方向评估](docs/repository-audit.md) · [项目审计](docs/PROJECT_AUDIT.md)
+
+问题与建议请提交 [Issue](https://github.com/Wukeeeeee/GIS-WORKTABLE-CN/issues)，尽量附最小复现数据。
+
+---
+
 ## 许可证与致谢
 
-项目采用 [MIT License](LICENSE)。Leaflet、CesiumJS、FastAPI、LangGraph、GeoPandas、Shapely、Rasterio 等依赖及第三方数据仍适用各自许可证和使用条款。
+项目源码采用 [MIT License](LICENSE)。Leaflet、CesiumJS、FastAPI、LangGraph、GeoPandas、Shapely、Rasterio 等依赖及第三方数据仍适用各自许可证和使用条款（见第八节）。
 
 卫星影像巡检的算法思路参考 [GeoHarness](https://github.com/Star-Learning/GeoHarness)；空间服务目录关联项目为 [GeoSource-MCP](https://github.com/Wukeeeeee/GeoSource-MCP.git)。

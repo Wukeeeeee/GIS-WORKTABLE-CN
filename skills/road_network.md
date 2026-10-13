@@ -2,12 +2,12 @@
 
 路网数据获取优先级：**离线/上传数据 > OSM 在线下载**。
 
-## 方式一：离线/上传数据（比赛与国内网络首选）
+## 方式一：离线/上传数据（演示与离线环境首选）
 1. 项目预置离线路网包：`cache/offline/roadnet/`（GraphML / GeoJSON）
 2. 用户上传路网文件（GeoJSON / Shapefile / GraphML），AI 自动识别为路网图层
 3. 有路网图层后直接用 `network_analysis` 工具分析（见下文）
 
-## 方式二：OSMnx 在线下载（国内网络可能超时）
+## 方式二：OSMnx 在线下载（网络受限时可能超时）
 ```python
 import osmnx as ox
 G = ox.graph_from_place('北京市海淀区', network_type='drive')

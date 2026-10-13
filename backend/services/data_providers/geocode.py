@@ -17,7 +17,7 @@ from backend.services.data_providers.errors import DataNotFoundError, DataProvid
 NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search"
 _NOMINATIM_ENDPOINTS = [NOMINATIM_ENDPOINT]
 
-# CN 兜底：阿里 DataV 行政边界服务（免 Key、国内直连），用于解析中国地名 → bbox
+# CN 降级：阿里 DataV 行政边界服务（免 Key、可直连），用于解析中国地名 → bbox
 DATAV_GEOJSON_URL = "https://geo.datav.aliyun.com/areas_v3/bound/geojson"
 
 
@@ -42,7 +42,7 @@ def _bbox_from_geojson_geometry(geom: dict) -> Optional[tuple]:
 
 
 def _resolve_bbox_via_datav(area: str) -> Optional[tuple]:
-    """CN 兜底：用 DataV 行政边界解析中国地名 → bbox。失败返回 None（由调用方继续走 Nominatim）。"""
+    """CN 降级：用 DataV 行政边界解析中国地名 → bbox。失败返回 None（由调用方继续走 Nominatim）。"""
     try:
         data = get_json(DATAV_GEOJSON_URL, params={"name": str(area).strip()}, timeout=DEFAULT_TIMEOUT)
         features = data.get("features") if isinstance(data, dict) else None
@@ -90,7 +90,7 @@ def resolve_area_bbox(area: str) -> tuple:
     if not area or not str(area).strip():
         raise DataProviderError("缺少空间范围：请提供城市/区域名，或直接给出经纬度范围 bbox。")
 
-    # CN 兜底优先：DataV 行政边界（免 Key、国内直连、WGS-84 转 GIS 已纠偏数据）
+    # CN 降级优先：DataV 行政边界（免 Key、可直连、WGS-84 转 GIS 已纠偏数据）
     try:
         from backend.services.cn_profile import is_cn
         if is_cn():

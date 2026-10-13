@@ -753,7 +753,7 @@
                       <li>在 AI 聊天中输入「获取 XX 的行政边界」</li>
                       <li>支持中国省/市/区三级行政区划（数据来源：阿里云 DataV）</li>
                       <li>坐标自动转为 WGS-84，结果自动加载到地图</li>
-                      <li>国外地区边界请用 AI 的 execute_python + osmnx 获取</li>
+                      <li>其他地区边界请用 AI 的 execute_python + osmnx 获取</li>
                     </ul>
 
                     <h3>热力图</h3>
@@ -890,12 +890,23 @@
           <!-- === 地图浮动图例（右下角） === -->
           <div class="map-floating-legend" id="mapFloatingLegend" style="display:none;">
             <div class="map-legend-header">
-              <span class="map-legend-title" id="mapLegendTitle">图例</span>
-              <button class="map-legend-close" id="mapLegendClose" title="收起图例">&times;</button>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                <span class="map-legend-title" id="mapLegendTitle">图例</span>
+              </div>
+              <button class="map-legend-close" id="mapLegendClose" title="收起图例" aria-label="收起图例">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
             </div>
             <div class="map-legend-field" id="mapLegendField"></div>
             <div class="map-legend-items custom-scrollbar" id="mapLegendItems"></div>
           </div>
+
+          <!-- 图例收起后保留的一键恢复小药丸按钮 -->
+          <button class="map-legend-toggle-pill" id="mapLegendTogglePill" style="display:none;" title="重新展开图例" aria-label="重新展开图例">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+            <span id="mapLegendToggleText">查看图例</span>
+          </button>
 
           <!-- 坐标显示 -->
           <div class="map-coords" id="mapCoords">
@@ -1349,7 +1360,7 @@
         <!-- === 网络代理 === -->
         <div class="modal-panel" id="panelNetwork">
           <h3>网络代理</h3>
-          <p class="modal-panel-desc">配置 HTTP 代理地址，用于 Esri 等海外卫星瓦片下载。留空则自动检测系统代理。</p>
+          <p class="modal-panel-desc">配置 HTTP 代理地址，用于访问需要中转的服务。留空则自动检测系统配置。</p>
 
           <div class="model-config-card">
             <div class="model-config-header">

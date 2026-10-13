@@ -18,7 +18,7 @@ GIS-WorkTable 采用 **前后端分离 + Agent 工作流 + 2D/3D 双地图引擎
 - **后端架构**：
   - 框架：FastAPI + Uvicorn，开启 GZip 压缩与 CORS 支持。
   - 模型适配与调度：
-    - `backend/services/llm_config.py`：多 Provider 动态切换（DeepSeek / GLM / Agnes / 自定义 OpenAI 兼容接口），支持客户端 API Key 与代理配置。
+    - `backend/services/llm_config.py`：多 Provider 动态切换（DeepSeek / GLM / Agnes / 自定义 OpenAI 兼容接口），支持客户端 API Key 与网络配置。
     - `backend/services/graph.py`：LangGraph ReAct Agent 工作流。自动编排大模型与工具执行，内置递归保护、网络重试及 Agent 2 结果真实性自检（Verifier）。
     - `backend/services/tools.py`：统一注册 120+ 个 LangChain `@tool` 工具，导出 StructuredTool 供 Agent 与 MCP Server 调度，具备工具执行历史自动记录功能（`history_service.py`）。
   - 核心空间计算库：GeoPandas、Shapely、PyProj、Rasterio、GDAL、Matplotlib、Scikit-learn、NetworkX。
@@ -40,7 +40,7 @@ GIS-WorkTable 采用 **前后端分离 + Agent 工作流 + 2D/3D 双地图引擎
 ### 2. 已实现但依赖外部网络/API Key (Conditional)
 - **高德地图服务**：`amap_poi_search`、`amap_geocode`（依赖有效的 AMAP Web Key）。
 - **OSM 道路与要素提取**：`download_road_network`、`fetch_osm_boundary_or_features`（依赖 Overpass 镜像网络连通性）。
-- **DEM 地表高程分析**：AWS/Terrain 瓦片服务在线获取（受海外网络影响）。
+- **DEM 地表高程分析**：AWS/Terrain 瓦片服务在线获取（受远程服务影响）。
 
 ### 3. 部分实现或有待提升规范 (Partially Implemented / Need Standard)
 - **图层重命名状态闭环**：历史代码中图层重命名只更新了图层面板属性，已在本次优化中补齐：前端 `GIS.state.renameLayer`、`GIS.map.renameLayer` 与后端注册表同步。

@@ -62,7 +62,7 @@ from backend.services.task_manager import (
 )
 
 def _vendor_file_uri(*parts):
-    """返回 frontend/vendor 下静态库的 file:// 绝对 URI（生成的独立 HTML 以 file 方式打开时本地加载，加载失败由页面内 CDN 回退兜底）。"""
+    """返回 frontend/vendor 下静态库的 file:// 绝对 URI（生成的独立 HTML 以 file 方式打开时本地加载，加载失败由页面内 CDN 回退降级）。"""
     try:
         base = Path(__file__).resolve().parents[2] / "frontend" / "vendor"
         return (base.joinpath(*parts)).as_uri()
@@ -197,7 +197,9 @@ _last_user_message: str = ""        # 本轮用户原始请求（由 graph.py �
 
 # 这些列表会被主模块读取，所以要导出
 # 线程锁，保证 get_pending_state 的"读取+清空"操作原子性
-_state_lock = threading.Lock()
+# RLock（可重入）：reset_registered_layers 持锁状态下会调用 _register_layer（内部再次抢锁），
+# 用非重入 Lock 会同线程自死锁（2026-10-13 E2E 实测：加载工程即挂死整个后端）
+_state_lock = threading.RLock()
 
 def get_pending_state():
     """获取当前所有待发送状态并消费（清空），防止跨请求污染和校验器重复收集"""
@@ -299,6 +301,7 @@ def record_tool_artifact(filename: str, filepath: str, artifact_type: str = "ima
 def reset_state(amap_key: str = "", task_id: str = ""):
     """每次请求开始时调用，清空所有共享状态"""
     global _current_amap_key, _clear_layers_flag, _search_call_count, _exec_call_count, _exec_log, _current_task_id
+    global _last_user_message, _conversation_context, _current_run_id
     # 保证输出目录在本轮任何工具用到之前就已就绪。
     # 此前只有 execute_python / _add_pending_item 等少数入口会初始化它，
     # 如果一轮里最先执行的工具是 spatial_interpolate 这类直接写 _temp_output_dir 的，
@@ -317,6 +320,13 @@ def reset_state(amap_key: str = "", task_id: str = ""):
         _exec_call_count = 0
         _exec_log.clear()
         _current_task_id = task_id or ""
+        # 会话级上下文同样要清：否则上一轮聊天留下的「用户原话/多轮上下文」会被
+        # 手动工具调用（/api/tools/invoke、MCP）继承，导致实体消歧选错地名
+        # （tools.py 内 _last_user_message / _conversation_context 参与城市候选判定）。
+        # 聊天流程在 reset_state() 之后会由 graph.py 重新 set_*，所以清空是安全的。
+        _last_user_message = ""
+        _conversation_context = ""
+        _current_run_id = ""
 
 
 def init_temp_dir():
@@ -422,7 +432,7 @@ def _extract_coords(geom: dict, coords: list):
 
 
 def _make_fid(props: dict, idx: int) -> str:
-    """稳定要素 ID：adcode > name > id > index 兜底。与前端 gis_state.js 规则一致。"""
+    """稳定要素 ID：adcode > name > id > index 降级。与前端 gis_state.js 规则一致。"""
     if props.get("adcode") not in (None, ""):
         return f"p:{props['adcode']}"
     if props.get("name"):
@@ -513,7 +523,7 @@ def _add_pending_item(url: str, file_path: str = None):
 
 @tool
 def search_web(query: str) -> str:
-    """搜索网络信息，返回网页标题/链接/摘要。用于搜索最新新闻、数据、资料。涉及国外内容用中英文搜。"""
+    """搜索网络信息，返回网页标题/链接/摘要。用于搜索最新新闻、数据、资料。涉及其他地区内容用中英文搜。"""
     global _search_call_count
     _search_call_count += 1
     if _search_call_count > 30:
@@ -529,7 +539,7 @@ def search_web(query: str) -> str:
     except Exception:
         content = ""
 
-    # CN 版移除 Yandex 兜底：境外搜索引擎国内不可达，失败还要白耗 20 秒超时
+    # 本仓移除 Yandex 降级：外部搜索引擎在网络受限环境下不可达，失败还要白耗 20 秒超时
 
     if not content:
         return "错误：搜索失败（Bing 中国未返回有效结果）"
@@ -671,7 +681,7 @@ def scrape_page(url: str, selector: str = "body") -> str:
 
 @tool
 def search_platform(platform: str, query: str) -> str:
-    """搜索中国互联网平台的内容（B站/bilibili 等），零配置国内直连"""
+    """搜索中国互联网平台的内容（B站/bilibili 等），零配置可直连"""
     platform = platform.lower().strip()
 
     if platform in ('bilibili', 'b站'):
@@ -892,7 +902,7 @@ def _ast_sandbox_check(code: str) -> str | None:
 # ============================================================
 
 def _rename_output_files(new_files: set, suffix: str, temp_dir: str) -> list:
-    """为输出目录中新生成的文件加时间戳前缀，避免文件名冲突。"""
+    """为输出目录中新生成的文件加时间戳版本，避免文件名冲突，同时保留原文件名供直连访问。"""
     ts = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
     renamed = []
     for fname in sorted(new_files):
@@ -902,13 +912,9 @@ def _rename_output_files(new_files: set, suffix: str, temp_dir: str) -> list:
         dest_name = f'{ts}_{fname}'
         dest = os.path.join(temp_dir, dest_name)
         try:
-            os.rename(src, dest)
-        except Exception:
             shutil.copy2(src, dest)
-            try:
-                os.remove(src)
-            except Exception:
-                pass
+        except Exception:
+            pass
         _add_pending_item(f'/output/{dest_name}', dest)
         renamed.append(dest_name)
     return renamed
@@ -1510,7 +1516,7 @@ def get_layer_detail(layer_name: str) -> str:
 
 @tool
 def datav_boundary(name: str) -> str:
-    """从阿里云 DataV 获取中国省/市/区三级行政边界，自动转 WGS-84 加载到地图。国外边界用 execute_python 调 osmnx。查不到时尝试上级行政区划。"""
+    """从阿里云 DataV 获取中国省/市/区三级行政边界，自动转 WGS-84 加载到地图。外部边界用 execute_python 调 osmnx。查不到时尝试上级行政区划。"""
     try:
         from backend.services.datav_service import fetch_boundary, get_ambiguous_candidates
         # 1. 检查是否属于全国多地重名区县（如鼓楼区、朝阳区、西湖区等）且用户未指明所属地级市
@@ -1605,7 +1611,7 @@ def drill_down(region: str = "", adcode: str = "") -> str:
         elif region_arg:
             child_name = region_arg      # 用户输入的区域名（如"武汉市"）
         else:
-            child_name = code            # 只有 adcode 时兜底
+            child_name = code            # 只有 adcode 时降级
         layer_name = f"{child_name}_{_LEVEL_NAMES.get(level, level)}"
         _push_layer(layer_name, data, {"color": "#e74c3c", "fillColor": "#e74c3c", "fillOpacity": 0.25})
         _register_layer(layer_name, data)
@@ -2771,7 +2777,7 @@ def download_road_network(location_name: str, network_type: str = "drive") -> st
     """下载指定城市/区域的路网数据并加载到地图，供 network_analysis 使用（数据源 OpenStreetMap，国内网络可能超时；失败/超时会自动返回离线包等替代方案）。
 location_name: 城市名（如"北京市""广州市""上海浦东新区"），或"经度,纬度,经度,纬度"（bbox）。
 network_type: drive(车行路) walk(步行) bike(骑行) all(全部)，默认 drive。"""
-    # 比赛/展示 profile：境外在线数据源整体禁用，直接给离线方案（不白耗 120 秒超时）
+    # 比赛/展示 profile：外部在线数据源整体禁用，直接给离线方案（不白耗 120 秒超时）
     try:
         from backend.services.cn_profile import is_competition
         if is_competition():
@@ -6267,7 +6273,7 @@ def spatial_moran(layer_name: str, field: str, weight_type: str = "distance",
             p_value = 2.0 * (1.0 - norm.cdf(abs(z_score)))
             method = "正态近似（随机化假设）"
         else:
-            # 方差算不出来时不做"假装显著"的兜底：改用置换检验
+            # 方差算不出来时不做"假装显著"的降级：改用置换检验
             # 固定种子保证同一份数据每次结论一致
             _rng = np.random.default_rng(20240915)
             _perm = []
@@ -8116,7 +8122,7 @@ def _write_dem_geotiff(path: str, result) -> None:
 
 
 def _resolve_layer_name(name: str) -> str:
-    """按注册表解析图层名：精确命中优先，子串模糊匹配兜底；未找到返回空串"""
+    """按注册表解析图层名：精确命中优先，子串模糊匹配降级；未找到返回空串"""
     if name in _registered_layers:
         return name
     for _key in _registered_layers:
@@ -8823,13 +8829,13 @@ def fetch_gis_data_url(
 
 @tool
 def search_global_entities(query: str, lang: str = "zh") -> str:
-    """全球开放地理实体与维基百科知识图谱检索（免 Key、全球覆盖）。注意：依赖境外服务（Wikidata），国内网络不可用；且境外实体数据的行政区划/国家标签口径不符合中国官方标准，CN 版默认不启用。
+    """全球开放地理实体与维基百科知识图谱检索（免 Key、全球覆盖）。注意：依赖外部服务（Wikidata），在网络受限环境下不可达；且外部实体数据的行政区划/国家标签口径不符合中国官方标准，本仓默认不启用。
     检索全球任意国家、山川河流、地标名胜、岛屿、行政区划，提取 Wikidata 经纬度坐标、实体定义与维基百科简介。
     用户查询全球地理实体或问"XX 在哪里/XX 的百科信息"时调用。"""
     try:
         from backend.services.cn_profile import is_cn
         if is_cn():
-            return ("该功能依赖境外数据源（Wikidata/Wikipedia），国内网络不可用，且其行政区划标注口径不符合中国官方标准，已停用。\n"
+            return ("该功能依赖外部数据源（Wikidata/Wikipedia），在网络受限环境下不可达，且其行政区划标注口径不符合中国官方标准，已停用。\n"
                     "国内地点请改用 amap_geocode（定位）、datav_boundary（行政边界）或 cn_aoi_search（POI/轮廓）。")
     except Exception:
         pass
@@ -8859,14 +8865,14 @@ def search_global_entities(query: str, lang: str = "zh") -> str:
 
 @tool
 def fetch_osm_boundary_or_features(query: str, feature_type: str = "boundary", bbox: str = "", limit: int = 200, auto_render: bool = True) -> str:
-    """全球开放街道地图（OSM）行政区划多边形边界与矢量要素抽取（免 Key）。注意：依赖境外服务（Nominatim/Overpass），国内网络不可用；且 OSM 行政边界画法不符合中国官方标准，CN 版默认停用。
+    """全球开放街道地图（OSM）行政区划多边形边界与矢量要素抽取（免 Key）。注意：依赖外部服务（Nominatim/Overpass），在网络受限环境下不可达；且 OSM 行政边界画法不符合中国官方标准，本仓默认停用。
     query: 地名（如 'Taiwan', 'Tokyo', 'Paris'）；feature_type: boundary（行政边界）/ roads（道路网）/ buildings（建筑物）/ water（水系）；
     bbox: 可选空间范围；limit: 要素上限；auto_render: 是否自动上图（默认 True）。
     用户需要拉取全球任意区域边界或 OSM 矢量时调用。"""
     try:
         from backend.services.cn_profile import is_cn
         if is_cn():
-            return ("该功能依赖境外数据源（OSM/Overpass/Nominatim），国内网络不可用，且 OSM 行政边界画法不符合中国官方标准，已停用。\n"
+            return ("该功能依赖外部数据源（OSM/Overpass/Nominatim），在网络受限环境下不可达，且 OSM 行政边界画法不符合中国官方标准，已停用。\n"
                     "中国行政边界请改用 datav_boundary（省/市/区县）；路网请使用离线路网包或上传文件。")
     except Exception:
         pass
@@ -9053,7 +9059,7 @@ tools = [
     fetch_osm_boundary_or_features,
 ]
 
-# —— CN profile 工具闸门：境外边界/实体数据源不进 Agent 视野（合规硬约束）——
+# —— CN profile 工具闸门：外部边界/实体数据源不进 Agent 视野（合规硬约束）——
 try:
     from backend.services.cn_profile import disabled_tool_names as _cn_disabled_tools
     _disabled = _cn_disabled_tools()

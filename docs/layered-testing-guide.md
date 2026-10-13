@@ -36,7 +36,7 @@ pytest backend/tests/layered/ -m "fast" -v
 - **执行时间**：~2 秒
 
 ### 2. 集成模式 (Integration Mode)
-适合修改了 GIS 空间工具、图层状态、数据源代理或图层接口后运行。
+适合修改了 GIS 空间工具、图层状态、数据源接入或图层接口后运行。
 ```bash
 python scripts/run_layered_tests.py --mode integration
 # 或使用 pytest marker:

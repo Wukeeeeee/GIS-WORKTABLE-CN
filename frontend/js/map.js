@@ -1,5 +1,5 @@
 /**
- * GIS AI WorkTable — 地图模块（CN 版）
+ * GIS AI WorkTable — 地图模块（本仓）
  * Leaflet 封装。底图白名单（合规硬约束）：高德影像/矢量（免 Key）、天地图（需 tk，官方口径）。
  * 纯影像底图不含国界线；天地图注记边界为中国官方口径。Esri/Bing/OSM 底图不在 CN 默认选项中。
  *
@@ -200,6 +200,22 @@ var _undoSkip = false;
 
     // 比例尺控件
     L.control.scale({position: 'bottomleft', metric: true, imperial: false}).addTo(mapInstance);
+
+    // CN：限制最大放大——比例尺不越过 1:3000（防止再放大后瓦片发糊、要素过密）。
+    // Web 墨卡托下比例尺随纬度变化，按当前中心纬度动态算 maxZoom：
+    // 分母 = (156543.034*cos(lat)/2^z) / 0.00026458(m/px@96dpi) >= 3000
+    var _CN_MIN_SCALE_DENOM = 3000;
+    function _applyCnMaxZoom() {
+      if (!mapInstance) return;
+      var lat = mapInstance.getCenter().lat;
+      var mPerPxAtZ0 = 156543.03392 * Math.cos(lat * Math.PI / 180);
+      var maxZ = Math.floor(Math.log2(mPerPxAtZ0 / 0.00026458 / _CN_MIN_SCALE_DENOM));
+      maxZ = Math.max(4, Math.min(19, maxZ)); // 保底 4，不高于底图 maxZoom 19
+      mapInstance.setMaxZoom(maxZ);
+      if (mapInstance.getZoom() > maxZ) mapInstance.setZoom(maxZ);
+    }
+    mapInstance.on('moveend zoomend', _applyCnMaxZoom);
+    _applyCnMaxZoom();
 
     mapInstance.on('mousemove', onMouseMove);
     mapInstance.on('zoomend', onZoomEnd);
@@ -503,7 +519,7 @@ var _undoSkip = false;
       };
       return layerBing;
     }
-    // esri - intl 保留：Esri World Imagery（境外源，CN 白名单之外）
+    // esri - intl 保留：Esri World Imagery（外部源，不在默认底图白名单内）
     return new L.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
       maxZoom: 19,

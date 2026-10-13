@@ -54,11 +54,11 @@ class TestGCJ02WGS84:
         assert lat_error_m < 1.0, f"纬度往返误差 {lat_error_m:.3f}m 超过 1m"
 
     def test_out_of_china_no_offset(self):
-        """中国境外坐标不转换"""
+        """中国范围外坐标不转换"""
         # 纽约坐标
         lng, lat = -74.0060, 40.7128
         result = gcj02_to_wgs84(lng, lat)
-        assert result == (lng, lat), "境外坐标不应转换"
+        assert result == (lng, lat), "范围外坐标不应转换"
 
     def test_beijing_coordinates(self):
         """北京地区转换验证"""
@@ -88,7 +88,7 @@ class TestGCJ02WGS84:
 
 
 class TestOutOfChina:
-    """中国境外判断测试"""
+    """中国范围外判断测试"""
 
     def test_beijing_in_china(self):
         assert not _is_out_of_china(116.4, 39.9)

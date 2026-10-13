@@ -414,7 +414,7 @@ window.GIS = window.GIS || {};
         target_crs: document.getElementById('rtDstCrs').value,
       });
     }
-    // 栅格类：选择器优先，手输名兜底
+    // 栅格类：选择器优先，手输名降级
     var layerName = document.getElementById('rtLayer').value ||
       document.getElementById('rtLayerText').value.trim();
     if (!layerName) { alert('请选择图层或输入栅格文件名'); return; }

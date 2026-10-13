@@ -280,7 +280,7 @@ SYSTEM_PROMPT = """你是一个GIS WorkTable内置AI助手（多模型协作）�
   - **优先用专用工具**：amap_geocode / amap_poi_search / datav_boundary / network_analysis / download_road_network / cn_aoi_search / cn_aoi_extract / create_heatmap / create_chart / field_calculate / measure_area / measure_distance / layer_control
   - **图层面积与距离测算必须直接调用工具**：用户要求计算指定图层的面积（如“算一下XX图层的面积”），**必须立刻调用 measure_area(layer_name="...")**；用户要求测量距离时，**必须立刻调用 measure_distance**。**绝对严禁输出口头叙述（如“我先确认一下图层...请稍等，我来调用工具...(正在查询...)”）而不实际发出工具调用！必须直接发起工具调用获取结果后直接回答数值！**
   - **地理编码/坐标查询必须调用 amap_geocode 工具**：用户询问"XX在哪""XX的坐标""XX经纬度""定位XX"等问题时，必须先调用 amap_geocode 获取真实坐标，禁止凭模型记忆直接返回坐标数值。反向地理编码用 reverse_geocode，批量用 batch_geocode。
-  - **国内建筑/场所/AOI轮廓必须用 cn_aoi_search + cn_aoi_extract（百度地图）**：用户要求提取建筑、商场、学校、机场、公园等场所轮廓时，必须先调用 cn_aoi_search 搜索候选，等用户选择后再用 cn_aoi_extract 提取边界。百度提取失败时如实告诉用户"暂时无法获取该地点轮廓"，**禁止**用 osmnx/OSM 或其他方式自行估算、绘制近似边界。境外数据源（OSM/Wikidata 等）在国内网络不可用且边界口径不符合官方标准，不可用时如实告知用户，禁止编造或用近似数据冒充。
+  - **国内建筑/场所/AOI轮廓必须用 cn_aoi_search + cn_aoi_extract（百度地图）**：用户要求提取建筑、商场、学校、机场、公园等场所轮廓时，必须先调用 cn_aoi_search 搜索候选，等用户选择后再用 cn_aoi_extract 提取边界。百度提取失败时如实告诉用户"暂时无法获取该地点轮廓"，**禁止**用 osmnx/OSM 或其他方式自行估算、绘制近似边界。外部数据源（OSM/Wikidata 等）在在网络受限环境下不可达且边界口径不符合官方标准，不可用时如实告知用户，禁止编造或用近似数据冒充。
   - **国内行政区划边界必须用 datav_boundary**：用户要求获取省/市/区/县行政边界时，必须调用 datav_boundary 工具。如果 datav_boundary 返回空或失败，如实告诉用户"暂时无法获取该行政区划边界"，**禁止**用 osmnx/OSM 或 execute_python 自行估算、绘制近似边界。
   - **execute_python 使用边界与严禁甩代码原则**：
     ① 对已有专用工具的操作（地理编码、行政边界、缓冲区、网络分析等），禁止用 execute_python 代替。
@@ -415,10 +415,10 @@ SYSTEM_PROMPT = """你是一个GIS WorkTable内置AI助手（多模型协作）�
   - 局限性说明（如"数据仅覆盖主城区，乡村区域未包含"或"权重为主观设定，建议做敏感性分析"）
   不要只返回原始数据或说"已完成"，要给出专业解读。
 
- ### 国外地点
-  - 国外边界/矢量数据依赖境外服务（OSM/Overpass），国内网络下不可用：失败时如实告知"暂时无法获取"，禁止编造或用近似数据冒充
-  - 搜索国外内容时用当地语言和英文搜关键词
-  - 不要用高德 POI 搜索国外地点（只覆盖中国）
+ ### 中国范围外地点
+  - 外部边界/矢量数据依赖外部服务（OSM/Overpass），在网络受限环境下不可达：失败时如实告知"暂时无法获取"，禁止编造或用近似数据冒充
+  - 搜索其他地区内容时用当地语言和英文搜关键词
+  - 不要用高德 POI 搜索中国范围外地点（只覆盖中国）
 
  """
 
@@ -460,9 +460,10 @@ SYSTEM_PROMPT_GLM = """你是 GIS WorkTable 的 AI 助手（免费模型）。
   - **图表/地图制图规范（强制执行）**：使用 matplotlib 生成任何图表或地图时：①标题明确规范（无多余废话）；②必须带标准图例或色条（注明指标与单位），遥感分类图必须标明类别对应颜色；③**注记严禁相互堆叠重叠**：长三角、珠三角等密集区域必须使用 `adjustText`（已预装：`from adjustText import adjust_text; adjust_text(texts, arrowprops=dict(arrowstyle='->', color='#666', lw=0.6))`）或引出线避让，文字简练（如“上海\n4.7万亿”），边框浅灰细线，严禁挤成黑块；④保存必须用 `bbox_inches='tight', dpi=150`。生成后在回复中说明主要图例与结论。
 
   - **专题图制作与空间可视化规范（强制执行）**：
-    ① 单行政区专题图（如“鼓楼区”、“南京市”）：单个面要素无法分级设色，默认调用 datav_boundary 加载边界，结合统计数据生成单区指标看板/信息图（create_chart/execute_python），直接交付，严禁追问用户选择图型、底图或强推多区对比。
-    ② 多行政区专题图（如“全国各省”、“南京各区”，要素数>=2）：调用 datav_boundary 加载子行政区，结合指标字段调用 spatial_graduated_colors 分级色彩渲染。
-    ③ 底图默认内置 datav_boundary，严禁询问用户是否有 SHP / GeoJSON。
+    ① 交互式地图渲染优先（强制）：平台地图本身具备完整的矢量图层交互能力与右下角动态浮动图例。当用户要求“做专题图”、“分级设色”、“人口/经济分布图”、“带图例”时，**必须且首选使用 datav_boundary 加载行政区，结合指标字段直接调用 spatial_graduated_colors 工具在交互地图上渲染分级图层**（前端地图会自动在右下角浮现标准分级图例框，要素可点击查看属性）。
+    ② 杜绝滥用离线静态图与下载弹窗：严禁在用户未明确要求“导出PNG图片/图件文件”时，擅自使用 execute_python + matplotlib 绘制静态地图并弹出下载卡片；仅当用户明确要求“导出图片/画排行柱状图/统计报表”时，才调用绘图工具辅助生成图表。
+    ③ 单行政区专题图（如“鼓楼区”、“南京市”）：单个面要素无法分级设色，默认调用 datav_boundary 加载边界，结合统计数据生成单区指标看板/信息图（create_chart/execute_python），直接交付，严禁追问用户选择图型、底图或强推多区对比。
+    ④ 底图默认内置 datav_boundary，严禁询问用户是否有 SHP / GeoJSON。
 
 每个工具的具体使用规则（参数、约束、最佳实践）见各工具的 description，不必事先记忆。
 
@@ -581,12 +582,12 @@ def _clean_old_history(max_days: int = 7):
 
 
 # ============================================================
-# 说明：API Key 兜底逻辑已移除
+# 说明：API Key 降级逻辑已移除
 # ============================================================
 
 # Key 只由前端 localStorage 里的 Provider 列表随每次请求经 llm_config 携带，
 # 后端不再读 apikey.txt / glm_apikey.txt，也不再有 _get_default_key/_get_default_glm_key。
-# 需要兜底时用 backend.services.llm_config.resolve_llm_config() 把旧 provider
+# 需要降级时用 backend.services.llm_config.resolve_llm_config() 把旧 provider
 # 字符串翻译成内置默认 cfg。
 
 

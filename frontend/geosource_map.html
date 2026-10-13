@@ -500,7 +500,7 @@
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // CN 底图：高德矢量（国内直连，无境外依赖）
+    // CN 底图：高德矢量（可直连，无外部依赖）
     L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
       attribution: '© 高德地图',
       subdomains: ['1', '2', '3', '4'],

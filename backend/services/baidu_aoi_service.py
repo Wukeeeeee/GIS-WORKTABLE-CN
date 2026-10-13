@@ -358,7 +358,7 @@ def extract_boundary(uid, place_name, headless=True):
                     except Exception:
                         page.wait_for_timeout(800)
 
-            # 方式 B: fetch 兜底
+            # 方式 B: fetch 降级
             if not geo_result[0]:
                 for _ in range(2):
                     js = page.evaluate(f"fetch('{api_url}').then(r=>r.text()).catch(e=>'FETCH_ERROR')")

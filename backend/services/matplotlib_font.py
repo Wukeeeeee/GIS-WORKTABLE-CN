@@ -12,7 +12,7 @@ matplotlib 中文字体统一配置模块（公共模块）
 设计原则：
 - 模块级只执行一次初始化（幂等）
 - 按优先级检测系统真实存在的中文字体
-- 提供多级 fallback（路径检测 -> fontManager 扫描 -> 英文兜底）
+- 提供多级 fallback（路径检测 -> fontManager 扫描 -> 英文降级）
 - 不影响英文、数字及其他 matplotlib 功能
 - 不改变现有图表功能
 """
@@ -59,7 +59,7 @@ def _detect_chinese_font():
 
 
 def _fallback_scan_fontmanager():
-    """兜底方案：遍历 fontManager 查找任何 CJK 字体。
+    """降级方案：遍历 fontManager 查找任何 CJK 字体。
     返回字体名称或 None。"""
     try:
         import matplotlib.font_manager as fm
@@ -104,7 +104,7 @@ def setup_chinese_font(force=False):
             except Exception:
                 font_name = detected_name  # 使用预期名称
 
-        # 第二级：fontManager 兜底扫描
+        # 第二级：fontManager 降级扫描
         if not font_name:
             font_name = _fallback_scan_fontmanager()
 
@@ -193,7 +193,7 @@ for _fp in _candidate_fonts:
         except Exception:
             continue
 
-# 兜底：遍历 fontManager 查找任何 CJK 字体
+# 降级：遍历 fontManager 查找任何 CJK 字体
 if not _font_set:
     try:
         for _f in _fm.fontManager.ttflist:

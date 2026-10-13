@@ -201,7 +201,7 @@ def create_task(user_goal: str, session_id: str = "default") -> str:
 
 
 def get_task(task_id: str) -> Optional[dict]:
-    """获取任务（内存优先，磁盘兜底）"""
+    """获取任务（内存优先，磁盘降级）"""
     with _lock:
         if task_id in _tasks:
             return _tasks[task_id]

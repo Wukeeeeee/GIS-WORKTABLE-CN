@@ -42,7 +42,7 @@ def test_west_china_no_false_positive():
 
 
 def test_japan_us_no_warnings():
-    """国外正常数据（含南半球负纬度）不误报"""
+    """中国范围外正常数据（含南半球负纬度）不误报"""
     gj = _fc(_point(139.69, 35.68), _point(-122.42, 37.77), _point(151.2, -33.87))
     assert qa_check(gj) == []
 

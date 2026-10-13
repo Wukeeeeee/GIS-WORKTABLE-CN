@@ -290,7 +290,7 @@ _LEGACY_DEFAULTS: dict = {
     "agnes": dict(
         base_url="https://apihub.agnes-ai.com/v1", model="agnes-2.0-flash",
         router=True, temperature=0.7, max_tokens=4096, timeout=60),
-    # 顶层 openrouter 兜底：模型名由 api_key 携带时的 deepseek-chat 形态
+    # 顶层 openrouter 降级：模型名由 api_key 携带时的 deepseek-chat 形态
     "openrouter": dict(
         base_url="https://openrouter.ai/api/v1", model="deepseek/deepseek-chat",
         temperature=0.7),

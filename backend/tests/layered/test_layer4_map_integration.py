@@ -4,34 +4,40 @@
 测试目标：
 1. 验证工具结果是否正确传递到现有图层注册机制（_register_layer / get_registered_layers / get_pending_state）；
 2. 图层状态是否正确更新（可见性、要素数量、CRS、属性字段）；
-3. 前后端接口（/api/layer/register, /api/layer/list, /api/geosource/proxy）是否能准确向前端地图暴露可渲染的数据；
+3. 前后端接口（/api/layer/register, /api/layers, /api/geosource/proxy）是否能准确向前端地图暴露可渲染的数据；
 4. 验证 GeoJSON 结构完全契合 Leaflet / VectorGrid 前端渲染引擎规范。
 """
 import pytest
-from backend.services.tools import _register_layer, get_registered_layers, get_pending_state
+from backend.services.tools import (
+    _register_layer,
+    get_registered_layers_snapshot,
+    get_pending_state,
+)
 
 pytestmark = [pytest.mark.map_integration, pytest.mark.integration]
 
 
 def test_layer_registration_updates_gis_state(sample_polygon_geojson):
-    """验证图层注册机制正确更新工作区图层列表与待处理状态"""
+    """验证图层注册机制正确更新图层快照与待处理状态"""
     layer_name = "南京市鼓楼区_边界"
     _register_layer(layer_name, sample_polygon_geojson)
 
-    # 1. 验证全局图层注册表
-    layers = get_registered_layers()
-    assert layer_name in layers
-    reg_layer = layers[layer_name]
-    assert reg_layer["type"] == "FeatureCollection"
-    assert len(reg_layer["features"]) == 1
+    # 1. 验证图层快照（注册后含 geojson、要素数与几何类型统计）
+    snap = get_registered_layers_snapshot()
+    matched = [s for s in snap if s.get("filename") == layer_name]
+    assert matched, "图层未出现在注册快照中"
+    reg_layer = matched[0]
+    assert reg_layer["geojson"].get("type") == "FeatureCollection"
+    assert reg_layer["feature_count"] == 1
+    assert reg_layer["geometry_types"] == ["Polygon"]
 
-    # 2. 验证 pending_state 同步挂载图层
+    # 2. 验证 pending_state 携带注册图层（registered_layers 为注册表镜像）
     pending = get_pending_state()
-    assert any(l["name"] == layer_name for l in pending.get("layers", []))
+    assert layer_name in pending.get("registered_layers", {})
 
 
 def test_api_layer_endpoints_sync_with_frontend(client, sample_polygon_geojson):
-    """验证后端 API /api/layer/register 与 /api/layer/list 的前后端数据通道"""
+    """验证后端 API /api/layer/register 与 /api/layers 的前后端数据通道"""
     # 模拟前端上传或 AI 注册图层
     resp = client.post("/api/layer/register", json={
         "name": "api_test_layer",
@@ -39,10 +45,10 @@ def test_api_layer_endpoints_sync_with_frontend(client, sample_polygon_geojson):
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
+    assert data.get("success") is True
 
     # 前端拉取图层列表
-    resp_list = client.get("/api/layer/list")
+    resp_list = client.get("/api/layers")
     assert resp_list.status_code == 200
     list_data = resp_list.json()
     assert any(item["name"] == "api_test_layer" for item in list_data.get("layers", []))

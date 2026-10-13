@@ -28,7 +28,7 @@ def _transform_lng(lng: float, lat: float) -> float:
 
 
 def _is_out_of_china(lng: float, lat: float) -> bool:
-    """粗略判断坐标是否在中国境外"""
+    """粗略判断坐标是否在中国范围外"""
     return not (72.004 <= lng <= 137.8347 and 0.8293 <= lat <= 55.8271)
 
 

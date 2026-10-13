@@ -416,7 +416,7 @@ window.GIS.api = (() => {
     var id = (typeof p === 'string' && p) ? p : getSelectedModel();
     var found = getProvider(id);
     if (found) return JSON.parse(JSON.stringify(found));
-    // 兜底：deepseek 形态，api_key 由老 key 别名给（尽力而为）
+    // 降级：deepseek 形态，api_key 由老 key 别名给（尽力而为）
     return { id: id || 'deepseek', name: id || 'deepseek', base_url: 'https://api.deepseek.com',
              model: 'deepseek-chat', api_key: _entryKey('deepseek-routed'),
              glm_prompt: false, router: true, reasoning: false, temperature: 0.7, max_tokens: null };

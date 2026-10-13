@@ -140,7 +140,7 @@ def test_failed_execution_recorded_with_error():
 
 
 def test_invalid_args_recorded_gracefully():
-    """参数错误不抛异常：包装层兜底返回错误文本，历史照常记录"""
+    """参数错误不抛异常：包装层降级返回错误文本，历史照常记录"""
     reset_state()
     reg = {t.name: t for t in TOOL_LIST}
     # focus_map 参数类型错误触发异常

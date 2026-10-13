@@ -38,7 +38,7 @@
 ### 5. 当前阻塞事项与下一步计划
 - **阻塞事项**：无。
 - **下一步建议**：
-  1. 持续细化高德与海外数据源在无 API Key / 网络离线情况下的优雅降级提示。
+  1. 持续细化高德与外部数据源在无 API Key / 网络离线情况下的优雅降级提示。
   2. 进一步丰富 3D 模式下的空间分析面板快捷交互体验。
 
 ---
@@ -229,7 +229,7 @@
      white-space: nowrap !important;
      max-width: 82% !important;
      ```
-   - 导致如“数据源接入指引”、“代理获取失败 (HTTP 502)”以及图层名称较长的通知（如 `ACS_Highlights_Population_Housing_Basics_Boundaries - County`）被生硬截断成半截字，用户必须 hover 才能通过浏览器原生粗糙的黑色 `title` 浮窗查看，视觉极差且无法阅读。
+   - 导致如“数据源接入指引”、“获取失败 (HTTP 502)”以及图层名称较长的通知（如 `ACS_Highlights_Population_Housing_Basics_Boundaries - County`）被生硬截断成半截字，用户必须 hover 才能通过浏览器原生粗糙的黑色 `title` 浮窗查看，视觉极差且无法阅读。
 2. **Markdown 格式未解析与原生 tooltip 污染**：
    - 胶囊内直接插入带 `**` 的原始文本，未调用内联 Markdown 解析；
    - 赋值 `bubble.title = text` 导致鼠标滑过时系统弹窗黑色矩形，破坏界面质感。

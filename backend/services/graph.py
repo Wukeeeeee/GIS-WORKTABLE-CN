@@ -521,7 +521,7 @@ def run_agent(
 
     # === 自校验已停用（2026-09-05）===
     # 原因：Verifier 每轮额外一次 LLM 调用，增加延迟和 API 成本；
-    # 实际运行中极少抓到错误（大量默认通过的兜底逻辑导致放行率高）。
+    # 实际运行中极少抓到错误（大量默认通过的降级逻辑导致放行率高）。
     # _run_verifier 函数保留，如需恢复取消下方注释即可。
     # if original_message and len(original_message) > 3:
     #     verdict = _run_verifier(build_llm(disable_reasoning(cfg)), original_message, final_text, pending)

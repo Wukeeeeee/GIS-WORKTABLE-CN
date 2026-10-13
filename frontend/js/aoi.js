@@ -109,7 +109,7 @@ window.GIS = window.GIS || {};
         });
       return;
     }
-    // 兜底：旧路径走 AI
+    // 降级：旧路径走 AI
     var message = '已选择AOI候选: ' + name + ' | ID: ' + poiId;
     GIS.chat.sendMessage(message).catch(function(err) {
       console.error('[GIS AOI] 发送失败:', err);

@@ -8,10 +8,11 @@
 """
 import os
 import json
+import glob
 import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import AIMessage
-from backend.services.tools import get_registered_layers, _temp_output_dir
+import backend.services.tools as gis_tools
 
 pytestmark = [pytest.mark.e2e, pytest.mark.regression]
 
@@ -28,7 +29,7 @@ def test_e2e_direct_tool_invocation_pipeline(client):
     assert res1_data.get("ok") is True
 
     # 2. 验证图层已被真实注册并在图层列表中可见
-    resp_layers = client.get("/api/layer/list")
+    resp_layers = client.get("/api/layers")
     assert resp_layers.status_code == 200
     layers = resp_layers.json().get("layers", [])
     assert any("鼓楼" in l.get("name", "") for l in layers)
@@ -51,9 +52,11 @@ print(f'OUTPUT_IMAGE:{out_png}')
     res2_data = resp2.json()
     assert res2_data.get("ok") is True
 
-    # 4. 验证磁盘上的成果图片
-    expected_img = os.path.join(_temp_output_dir, "e2e_pipeline_output.png")
-    assert os.path.exists(expected_img)
+    # 4. 验证磁盘上的成果图片（输出目录动态读取，沙箱可能对重名文件加时间戳后缀）
+    gis_tools.init_temp_dir()
+    candidates = glob.glob(os.path.join(gis_tools._temp_output_dir, "*e2e_pipeline_output*.png"))
+    assert candidates, f"成果图片未在 {gis_tools._temp_output_dir} 生成"
+    expected_img = max(candidates, key=os.path.getmtime)
     assert os.path.getsize(expected_img) > 100
 
 
@@ -72,15 +75,22 @@ def test_e2e_agent_workflow_full_stream_pipeline(client):
     # 验证流式生成器能正常流出 thinking 与 done 事件
     events = []
     # 使用纯文本 fallback/done 测试流式格式
-    with patch("backend.services.graph.create_react_agent") as mock_agent_factory:
+    # 新会话单条消息会走"简单问题快速 bypass"分支（直接 llm.invoke），
+    # 因此同时 mock build_llm，保证两种分支都不触网
+    with patch("backend.services.graph.create_react_agent") as mock_agent_factory, \
+         patch("backend.services.graph.build_llm") as mock_build_llm:
         mock_agent = MagicMock()
         mock_agent.stream.return_value = [
             {"messages": [AIMessage(content="已成功为您检索南京市鼓楼区边界并展示在地图中。")]}
         ]
         mock_agent_factory.return_value = mock_agent
 
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = AIMessage(content="已成功为您检索南京市鼓楼区边界并展示在地图中。")
+        mock_build_llm.return_value = mock_llm
+
         cfg = LLMConfig(api_key="mock", base_url="http://mock", model="mock")
-        for chunk in run_agent_stream("查询南京市鼓楼区", session_id="test_e2e_session", cfg=cfg):
+        for chunk in run_agent_stream("帮我在地图上加载南京市鼓楼区的边界", session_id="test_e2e_session", cfg=cfg):
             if chunk.startswith("data: "):
                 try:
                     payload = json.loads(chunk[6:].strip())

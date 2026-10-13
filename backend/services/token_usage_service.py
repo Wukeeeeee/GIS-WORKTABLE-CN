@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Token 计量基建：从 AIMessage 提取 usage_metadata，无 metadata 时用字符数 ÷ 3.0 兜底，并追加到 logs/token_usage.jsonl"""
+"""Token 计量基建：从 AIMessage 提取 usage_metadata，无 metadata 时用字符数 ÷ 3.0 降级，并追加到 logs/token_usage.jsonl"""
 import os
 import json
 import time
@@ -43,7 +43,7 @@ def extract_and_record_token_usage(
     if has_api_usage and (total_input > 0 or total_output > 0):
         usage_type = "api"
     else:
-        # 兜底：字符数估算（中文+英文混合模式校准比率 3.0）
+        # 降级：字符数估算（中文+英文混合模式校准比率 3.0）
         usage_type = "estimate"
         # 估算 input：输入消息字符 + 工具 schema 字符
         input_chars = schema_chars

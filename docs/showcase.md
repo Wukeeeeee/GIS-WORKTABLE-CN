@@ -4,7 +4,7 @@
 
 ## 项目介绍草稿
 
-GIS WorkTable 是结合自然语言 AI Agent 与手动工具的开源 GIS 工作台。它把空间数据接入、分析、2D/3D 展示和结果导出串成可检查的工作流，让用户能通过交互面板或自然语言完成任务，并核对图层与文件产物。项目采用 FastAPI、LangGraph、Leaflet 和 CesiumJS，源码以 AGPL v3 开放。
+GIS WorkTable 是结合自然语言 AI Agent 与手动工具的开源 GIS 工作台。它把空间数据接入、分析、2D/3D 展示和结果导出串成可检查的工作流，让用户能通过交互面板或自然语言完成任务，并核对图层与文件产物。项目采用 FastAPI、LangGraph、Leaflet 和 CesiumJS，源码以 MIT 协议开放。
 
 ## 建议演示流程
 

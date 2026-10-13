@@ -48,7 +48,7 @@ GIS 状态目前分散在**三处、以不同键互相耦合**：
 2. **无事件/订阅机制**：模块间直接函数调用（`GIS.map.loadGeoJSON(...)`），chat.js 用 switch-case 手工分发 `layer_ops`（chat.js:1150-1212）。加第三、第四个消费者（3D、面包屑、属性面板）只能继续 if-else。
 3. **后端以 name 为唯一键**：`_registered_layers` 是模块级全局、key 是名字，重名靠前端加时间戳后缀绕过（chat.js:1241 `uniqueName = layerName + '_' + Date.now()`）；前后端各自拼 uniqueName，可能出现前端叫 A_123、后端叫 A 的漂移。
 4. **符号化配置只在前端**：`_symbologyConfig` 不进工程文件、不回传后端，Agent 每轮重新用 `spatial_graduated_colors` 生成，与用户手调状态会互相覆盖。
-5. **CRS 约定为隐式**：全链路默认 WGS-84（map.js 头注释），DataV 的 GCJ-02 在后端转好（datav_service.py:191-195），前端只留了一个经纬度颠倒的兜底（map.js:489-495）。没有正式的 per-layer CRS 字段（`layer_service.inspect_geojson` 只做检测）。
+5. **CRS 约定为隐式**：全链路默认 WGS-84（map.js 头注释），DataV 的 GCJ-02 在后端转好（datav_service.py:191-195），前端只留了一个经纬度颠倒的降级（map.js:489-495）。没有正式的 per-layer CRS 字段（`layer_service.inspect_geojson` 只做检测）。
 6. **Project 状态**：`project_service.py` 用 CAS blob（sha256 gzip）存 layers/messages/map_state，结构健康，可平滑加入 `crs`、`style`、`fid` 字段。
 
 ### 2.3 可复用的积木（好消息）
@@ -249,7 +249,7 @@ GIS.state.drill = {
 }
 ```
 
-**Feature ID 方案**（解决跨渲染器身份）：`_register_layer`（tools.py:339）注册时为每个 feature 注入 `_fid`（有 `adcode`/`name`/`id` 属性时用稳定值 `p:430000`，否则用坐标+属性哈希，最后兜底 index）。前端 `_featureMap` 键从 `name:idx` 改为 `layer_id:_fid`。成本极低，收益是选中/同步/撤销全链路稳定。
+**Feature ID 方案**（解决跨渲染器身份）：`_register_layer`（tools.py:339）注册时为每个 feature 注入 `_fid`（有 `adcode`/`name`/`id` 属性时用稳定值 `p:430000`，否则用坐标+属性哈希，最后降级 index）。前端 `_featureMap` 键从 `name:idx` 改为 `layer_id:_fid`。成本极低，收益是选中/同步/撤销全链路稳定。
 
 ### 5.3 2D↔3D 同步原则（回答「同步什么、不同步什么」）
 
@@ -282,7 +282,7 @@ GIS.state.drill = {
 
 ## 7. CesiumJS vs Cesium Ion（必须回答的问题）
 
-**CesiumJS**（`npm i cesium` / 本地静态文件，Apache-2.0 开源）与 **Cesium Ion**（商业云服务：Bing 影像代理、Cesium World Terrain、OSM Buildings、geocoder、资产托管）是两个东西。**CesiumJS 可 100% 独立运行**，Viewer 默认值里藏着的 Ion 依赖需要显式关掉：
+**CesiumJS**（`npm i cesium` / 本地静态文件，Apache-2.0 开源）与 **Cesium Ion**（商业云服务：Bing 影像服务、Cesium World Terrain、OSM Buildings、geocoder、资产托管）是两个东西。**CesiumJS 可 100% 独立运行**，Viewer 默认值里藏着的 Ion 依赖需要显式关掉：
 
 ```js
 const viewer = new Cesium.Viewer(container, {
@@ -317,7 +317,7 @@ Ion 何时有价值：想要开箱即用的全球地形/建筑/影像且接受�
 
 | 数据 | 来源 | 格式 | CRS | 更新 | 精度 | 许可 | 学术 | 商业 |
 |---|---|---|---|---|---|---|---|---|
-| ★行政区划（国/省/市/区县） | 阿里 DataV.GeoAtlas（已集成 `datav_service.py`） | GeoJSON | GCJ-02（后端已转 WGS84） | 不定期（跟随民政部区划） | 中（可视化级） | 无正式授权文档，免费开放接口；属演示服务，有下线风险（需缓存兜底，项目已做 `cache/aoi/`） | ✅ | ⚠️ 灰色（建议仅展示用途） |
+| ★行政区划（国/省/市/区县） | 阿里 DataV.GeoAtlas（已集成 `datav_service.py`） | GeoJSON | GCJ-02（后端已转 WGS84） | 不定期（跟随民政部区划） | 中（可视化级） | 无正式授权文档，免费开放接口；属演示服务，有下线风险（需缓存降级，项目已做 `cache/aoi/`） | ✅ | ⚠️ 灰色（建议仅展示用途） |
 | ★行政区划（官方底图） | 天地图 tianditu.gov.cn（Web API key 免费） | API/瓦片 | CGCS2000 公开加密 | 官方维护 | 官方 | 开发者许可，非商用免费、商用需授权 | ✅ | ⚠️ 需审批 |
 | 基础地理 | 全国地理信息资源目录服务 webmap.cn（1:100万公众版） | SHP/GDB | CGCS2000 | 版本制 | 1:100万 | 公众版免费下载，署名、不得转让 | ✅ | ⚠️ |
 | 行政边界（全球） | Natural Earth | SHP/GeoJSON | WGS84 | 稳定 | 1:10m（粗） | Public Domain | ✅ | ✅ |

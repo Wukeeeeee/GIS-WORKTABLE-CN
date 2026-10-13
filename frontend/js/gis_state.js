@@ -7,7 +7,7 @@
  *
  * 设计约定（详见 docs/research_3d_globe_drilldown.md §5）：
  *  - 数据统一 WGS-84 GeoJSON（DataV 的 GCJ-02 由后端 datav_service 转好）
- *  - 要素身份 = layer_id + _fid（adcode/name 稳定值，兜底 index）
+ *  - 要素身份 = layer_id + _fid（adcode/name 稳定值，降级 index）
  *  - 同步的是 GIS 数据状态；相机/绘制会话等 Renderer 私有状态不同步
  */
 
@@ -28,7 +28,7 @@ window.GIS = window.GIS || {};
     stack: [],                // [{ level, adcode, name, layerId }]
   };
 
-  // 稳定 _fid：adcode > name > id > index 兜底
+  // 稳定 _fid：adcode > name > id > index 降级
   function makeFid(props, idx) {
     props = props || {};
     if (props.adcode !== undefined && props.adcode !== null && props.adcode !== '') {

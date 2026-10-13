@@ -4,7 +4,7 @@
 
 ## 概述
 
-将 `indexbygoogle.html` 的 Google Material Design 风格复刻到 `frontend/index.html`，使用纯内联 SVG 图标替代 Google Material Symbols，通过 jsDelivr 国内 CDN 加载 Leaflet，确保在国内无需 VPN 即可使用。
+将 `indexbygoogle.html` 的 Google Material Design 风格复刻到 `frontend/index.html`，使用纯内联 SVG 图标替代 Google Material Symbols，通过 jsDelivr 国内 CDN 加载 Leaflet，确保在国内直接可用。
 
 ## 页面布局
 

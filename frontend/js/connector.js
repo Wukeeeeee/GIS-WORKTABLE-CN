@@ -292,7 +292,7 @@
     if (window.GIS && window.GIS.settings && typeof window.GIS.settings.openModal === 'function') {
       window.GIS.settings.openModal('geo-api');
     } else {
-      // 兜底：手动打开并切换
+      // 降级：手动打开并切换
       var modal = document.getElementById('settingsModal');
       if (!modal) return;
       var settingsBtn = document.getElementById('settingsBtn');
