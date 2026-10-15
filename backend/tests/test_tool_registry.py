@@ -44,11 +44,25 @@ def test_tools_module_imports_and_has_substantial_tools():
     assert len(TOOL_LIST) >= 100
 
 
+
+
+def _profile_disabled():
+    """当前 CN profile 下被合规闸门剔除的工具名（这些工具"有定义但不注册"是预期行为）"""
+    try:
+        from backend.services.cn_profile import disabled_tool_names
+        return set(disabled_tool_names())
+    except Exception:
+        return set()
+
+
 def test_every_defined_tool_is_registered():
-    """每个 @tool 定义都必须出现在 tools 列表里，否则 LLM 永远看不到它"""
+    """每个 @tool 定义都必须出现在 tools 列表里，否则 LLM 永远看不到它。
+
+    CN 例外：当前 profile 下被合规闸门禁用的工具（如境外边界/实体）不注册是预期行为。
+    """
     defined = _defined_tools()
     registered = {getattr(t, "name", None) for t in TOOL_LIST}
-    missing = sorted(set(defined) - registered)
+    missing = sorted(set(defined) - registered - _profile_disabled())
     assert not missing, f"定义了但未注册到 tools 列表：{missing}"
 
 
@@ -62,8 +76,11 @@ def test_no_function_defined_twice():
 def test_source_definition_count_matches_registry():
     """源码里 @tool 的定义数必须与注册数一致（防"加了定义忘了注册"）"""
     names = _ast_tool_definitions(T.__file__)
-    assert len(names) == len(TOOL_LIST), (
-        f"源码定义 {len(names)} 个 @tool，tools 列表注册 {len(TOOL_LIST)} 个")
+    expected = len(names) - len(_profile_disabled() & set(names))
+    assert expected == len(TOOL_LIST), (
+        f"源码定义 {len(names)} 个 @tool（扣除当前 profile 禁用的 "
+        f"{len(_profile_disabled() & set(names))} 个应为 {expected} 个），"
+        f"tools 列表注册 {len(TOOL_LIST)} 个")
 
 
 def test_no_duplicate_registration():
@@ -88,8 +105,12 @@ def test_every_tool_has_unique_name():
 
 
 def test_tool_count_matches_definition_count():
-    """列表长度与 @tool 定义数一致，防止有人只加定义不加注册"""
-    assert len(TOOL_LIST) == len(_defined_tools())
+    """列表长度与 @tool 定义数一致（扣除当前 profile 禁用的工具），防止只加定义不加注册"""
+    defined = set(_defined_tools())
+    expected = len(defined) - len(_profile_disabled() & defined)
+    assert len(TOOL_LIST) == expected, (
+        f"定义 {len(defined)} 个（当前 profile 禁用 {len(_profile_disabled() & defined)} 个），"
+        f"应为 {expected} 个，实际注册 {len(TOOL_LIST)} 个")
 
 
 @pytest.mark.parametrize("tool_name", [

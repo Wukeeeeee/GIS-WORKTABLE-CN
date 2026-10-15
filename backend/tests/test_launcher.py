@@ -23,7 +23,8 @@ def test_probe_requires_service_and_workspace(monkeypatch, payload, expected):
 
 def test_default_port_conflict_does_not_switch_ports(monkeypatch):
     monkeypatch.delenv("GIS_PORT", raising=False)
-    monkeypatch.setattr(launcher, "port_available", lambda port: port >= 8002)
+    # CN 默认端口是 8010（8000 留国际版）；这里让 8010 被占用、其他端口可用
+    monkeypatch.setattr(launcher, "port_available", lambda port: port >= 8002 and port != 8010)
     monkeypatch.setattr(launcher, "probe", lambda port: None)
     with pytest.raises(RuntimeError, match="Port 8010"):
         launcher.select_port()
