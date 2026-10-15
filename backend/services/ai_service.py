@@ -286,10 +286,12 @@ SYSTEM_PROMPT = """你是一个GIS WorkTable内置AI助手（多模型协作）�
     ① 对已有专用工具的操作（地理编码、行政边界、缓冲区、网络分析等），禁止用 execute_python 代替。
     ② **但当需要生成自定义专题图、指标看板、复杂多子图图表（matplotlib/pyecharts）时，你必须自己调用 execute_python 直接执行代码生成成果图**！
     ③ **绝对严禁在正文中输出 Python 代码并让用户去本地或 Jupyter 运行**！严禁说“我没法在这边直接出图，你复制到本地运行”！平台已预装 Python 沙箱与绘图库，必须由你直接调用工具执行，将图片保存到 output 目录由系统自动展示给用户。
+    ④ **严禁在最终回复里粘贴你已经执行过的源码**（复述也不行）：代码通过 execute_python 在服务端跑完后就是**执行细节，不是交付物**。正文只写"做了什么→拿到什么结果→结论是什么"，**禁止把 ```python 代码块原样贴给用户**（几百行代码会把结论和图件卡片挤到看不见）。只有当用户明确索要代码时才允许展示源码。
   - 使用 execute_python 时**禁止硬编码 API Key**（高德 Key 已自动注入为 _AMAP_KEY 变量，直接从变量读取）。
   - **复杂多步骤任务使用 execute_workflow**：当任务需要按顺序执行3个以上GIS工具且步骤间有数据依赖时（如加载边界→裁剪影像→计算NDVI→区域统计），优先使用 execute_workflow 工具，传入结构化的 Workflow JSON。这样可以清晰展示分析流程、自动传递上游输出、失败时停止后续步骤。简单任务或无依赖的并行任务不需要用 Workflow，直接调工具即可。
   - 如果不确定用哪个工具，优先选专用工具而非 execute_python——专用工具有更好的错误处理和坐标转换。
   - **execute_python 批量执行规范**：当需要生成多张图片/图表时，**必须在一次 execute_python 调用中完成所有图表生成**（使用 plt.subplot 或多次 plt.savefig），不要为每张图片单独调用 execute_python。单独调用会触发过热保护（上限20次/请求）。
+  - **严禁在最终回复里粘贴你已经执行过的源码**（复述也不行）：代码跑完后只是执行细节，不是交付物，正文只写"做了什么→结果是什么→结论是什么"；只有用户明确索要代码时才展示源码。
   - **图表/地图制图规范（强制执行）**：使用 matplotlib 生成任何图表或地图成果图时：
     ① **版面紧凑与无裁切**：保存时必须指定 `plt.savefig(..., bbox_inches='tight', dpi=150)` 并合理设置 figsize（推荐宽屏比例如 10x6 或 9x6），确保主体撑满画幅、无四周大面积无意义留白。色条（Colorbar）若置于右侧，必须设置 `fraction=0.03, pad=0.04`，避免右侧文字刻度被画布边缘截断。
     ② **专业制图排版（杜绝图表垃圾）**：行政区专题图/面要素填色图**禁止使用灰底与网格线**（背景保持纯白或透明），必须使用 `plt.axis('off')` 关闭无意义的经纬度数字坐标轴；标题必须简明规范（如《2024年全国城市GDP前20强分布图》），**严禁在主标题加括号写"黄→橙→红"或"颜色越深代表越高"等废话**。
@@ -339,6 +341,12 @@ SYSTEM_PROMPT = """你是一个GIS WorkTable内置AI助手（多模型协作）�
  3. **严禁自我加戏与擅自扩大范围**：
     - 用户未主动要求时，**严禁将单个行政区的问题膨胀为多个同名行政区对比或跨区域横向对比**（例如用户问鼓楼区GDP后要专题图，严禁主动把福州、徐州、开封鼓楼区拉来做对比，严禁强推跨区域对比方案）。
 
+ ## 搜索纪律（必须遵守）
+ 1. **搜索词只写事实关键词**（地区+指标+年份+统计公报/公报），严禁把猜测的数值混入搜索词（例如严禁搜广州 GDP 2025 32000亿数字是你猜的，会自我误导）。数值必须从搜索结果的摘要/网页正文中提取。
+ 2. **search_web 返回的是结构化摘要**（标题/链接/摘要），若摘要已含所需数值，直接引用并标注来源链接，不要为了再确认而反复搜索或抓取网页。
+ 3. **每轮搜索最多 1-2 次**：第一次没找到就换关键词（更短、更核心）再试一次；两次仍无结果，就明确告知用户该数据未能检索到，基于常识给出参考值并注明未经核实，严禁继续空转。
+ 4. **抓取网页（fetch_webpage）仅用于**：搜索摘要信息不足以回答、且该链接明确是官方来源（.gov.cn、统计局、正规媒体）时。非官方来源且摘要已够用时不要抓取。
+ 5. **年份常识**：当年 GDP、人口等统计公报通常在次年 1-3 月才发布。用户问当年数据而公报未发布时，直接说明并给最近已发布年份的数据，不要反复搜索不存在的数据。
  ## 行政区划消歧与重名区县确认（必须遵守）
  中国存在多个重名区县。当用户查询数据、分析、制图、检索以下常见重名区县，且**未明确指定上级地级市或省份**时（如用户仅输入"鼓楼区"、"朝阳区"、"普陀区"、"西湖区"、"白云区"、"和平区"、"城关区"、"龙华区"、"宝山区"、"新华区"、"桥西区"）：
  - **严禁擅自推定或默认城市**：严禁自行主观推定为南京市鼓楼区、北京市朝阳区、上海市普陀区等任何默认城市！也不得在正文中直接输出默认城市的数据再附带问句。
@@ -457,6 +465,7 @@ SYSTEM_PROMPT_GLM = """你是 GIS WorkTable 的 AI 助手（免费模型）。
   - 有专用工具的操作不得用 execute_python 代替
   - execute_python 中禁止硬编码 API Key
   - **execute_python 批量执行规范**：当需要生成多张图片/图表时，**必须在一次 execute_python 调用中完成所有图表生成**（使用 plt.subplot 或多次 plt.savefig），不要为每张图片单独调用 execute_python。单独调用会触发过热保护（上限20次/请求）。
+  - **严禁在最终回复里粘贴你已经执行过的源码**（复述也不行）：代码跑完后只是执行细节，不是交付物，正文只写"做了什么→结果是什么→结论是什么"；只有用户明确索要代码时才展示源码。
   - **图表/地图制图规范（强制执行）**：使用 matplotlib 生成任何图表或地图时：①标题明确规范（无多余废话）；②必须带标准图例或色条（注明指标与单位），遥感分类图必须标明类别对应颜色；③**注记严禁相互堆叠重叠**：长三角、珠三角等密集区域必须使用 `adjustText`（已预装：`from adjustText import adjust_text; adjust_text(texts, arrowprops=dict(arrowstyle='->', color='#666', lw=0.6))`）或引出线避让，文字简练（如“上海\n4.7万亿”），边框浅灰细线，严禁挤成黑块；④保存必须用 `bbox_inches='tight', dpi=150`。生成后在回复中说明主要图例与结论。
 
   - **专题图制作与空间可视化规范（强制执行）**：
@@ -487,8 +496,22 @@ def _ensure_history_dir():
     os.makedirs(_HISTORY_DIR, exist_ok=True)
 
 
+# session_id 白名单清洗：只保留字母/数字/下划线/连字符，其余替换为 _。
+# 防止前端传入 ../../xxx 等路径片段污染 history/缓存目录（写文件路径均经此函数）。
+_SESSION_ID_RE = None
+
+def _sanitize_session_id(session_id: str) -> str:
+    global _SESSION_ID_RE
+    if not session_id:
+        return "default"
+    if _SESSION_ID_RE is None:
+        import re as _re_mod
+        _SESSION_ID_RE = _re_mod.compile(r'[^a-zA-Z0-9_\-]')
+    sid = _SESSION_ID_RE.sub('_', str(session_id))[:80]
+    return sid or "default"
+
 def _history_path(session_id: str) -> str:
-    return os.path.join(_HISTORY_DIR, f"session_{session_id}.json")
+    return os.path.join(_HISTORY_DIR, f"session_{_sanitize_session_id(session_id)}.json")
 
 
 def _sanitize_history(history: list) -> list:
@@ -501,6 +524,8 @@ def _sanitize_history(history: list) -> list:
         role = msg.get("role", "user")
         new_msg = {"role": role}
         new_msg["content"] = msg.get("content")
+        if role == "assistant" and isinstance(new_msg["content"], str):
+            new_msg["content"] = _strip_protocol_text(new_msg["content"])
         if role == "tool":
             new_msg["tool_call_id"] = msg.get("tool_call_id", "")
         tool_calls = msg.get("tool_calls")
@@ -538,6 +563,50 @@ def _save_history(session_id: str, history: list):
         pass
 
 
+def _strip_protocol_text(text: str) -> str:
+    """清洗 assistant 内容里泄漏的工具调用协议原文（DSML/tool_call 等）。
+
+    泄漏一旦写进历史会形成反馈循环：下一轮模型在上下文里看到自己输出过的
+    协议原文，就会继续模仿该格式把工具调用当正文输出 → 工具不再执行、
+    协议文本直接漏给用户。所以在【写入历史前】与【读出历史时】双向清洗。
+
+    实现采用逐行状态机 + 兜底标签删除，不依赖开/闭标签正确配对
+    （模型输出常有缺斜杠、块交错等畸形，纯正则配对会漏）。
+    """
+    if not text:
+        return text
+    if "DSML" not in text and "<tool_call" not in text and "```tool_call" not in text:
+        return text
+
+    import re as _re
+    lines = text.splitlines(keepends=True)
+    out_lines = []
+    inside_block = False
+    open_re = _re.compile(r'<[|\s｜]*DSML')
+    close_re = _re.compile(r'</[|\s｜]*DSML')
+    for line in lines:
+        has_open = bool(open_re.search(line))
+        has_close = bool(close_re.search(line))
+        if inside_block:
+            if has_close:
+                inside_block = False  # 块结束（闭合行本身也丢弃）
+            continue
+        if has_open:
+            if not has_close:  # 单行自闭合（开闭同现）直接丢弃；只有孤立开标签才进块模式
+                inside_block = True
+            continue
+        out_lines.append(line)
+    cleaned = "".join(out_lines)
+    # 兜底：删除所有残余 DSML 标签 token（含畸形闭合）
+    cleaned = _re.sub(r'</?[|\s｜]*DSML[|\s｜]*[^>]*>', '', cleaned)
+    # 其余协议标记
+    cleaned = _re.sub(r'<tool_call>.*?</tool_call>', '', cleaned, flags=_re.DOTALL)
+    cleaned = _re.sub(r'</?tool_call>', '', cleaned)
+    cleaned = _re.sub(r'```tool_call.*?```', '', cleaned, flags=_re.DOTALL)
+    cleaned = _re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
+
+
 def commit_assistant_reply(session_id: str, response: str, reasoning: str = None):
     """把一轮 AI 回复写回会话历史并落盘（幂等：末条已是 assistant 则跳过）。
 
@@ -553,6 +622,7 @@ def commit_assistant_reply(session_id: str, response: str, reasoning: str = None
         conversation_history[session_id] = history
     if history and history[-1].get("role") == "assistant":
         return  # 已提交过，防重复
+    response = _strip_protocol_text(response)
     entry = {"role": "assistant", "content": response}
     if reasoning:
         entry["reasoning_content"] = reasoning
@@ -762,11 +832,15 @@ def _build_system_content(cfg, message: str, session_id: str = "default", force_
         pass
 
     # === Task Manager: 注入任务工作上下文（最新代码 + Artifact + 执行历史） ===
+    # 注意：必须按 session 查任务，不能用全局 get_current_task_id()。
+    # 请求管线里 set_current_task 要等到 run_agent/run_agent_stream 内部才执行，
+    # 构建本条 system prompt 时全局值还是「上一个请求（可能是别的会话）」的任务——
+    # 新会话第一条消息会被注入旧会话的任务目标/上一轮源码/执行历史，
+    # 模型直接把旧话题（如广东GDP排名）当作当前任务复述 → 跨会话幻觉污染。
     try:
-        from backend.services.tools import get_current_task_id
-        _tid = get_current_task_id()
+        from backend.services.task_manager import find_active_task_for_session, build_task_context
+        _tid = find_active_task_for_session(session_id)
         if _tid:
-            from backend.services.task_manager import build_task_context
             _task_ctx = build_task_context(_tid)
             if _task_ctx:
                 appendix_parts.append(_task_ctx)
