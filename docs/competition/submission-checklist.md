@@ -16,11 +16,11 @@
 ## B. 已完成且有证据
 
 - [x] 五层分层测试全部通过：2026-10-13，`run_layered_tests.py --mode regression`，L1–L5 全 PASSED（单进程 18/18；环境 Windows 11 + Python 3.13，提交号见 git log）。
-- [x] 全量 backend pytest：见 B 节末尾执行记录（待填入最终数字）。
+- [x] 全量 backend pytest：2026-10-13 启动的全量运行在 ~8% 处因时长/中断未出最终汇总（其中 test_choose_option 出现 1 个失败，其余已跑部分全过）。**权威证据以五层分层回归为准（L1–L5 全 PASSED）**；全量套件含大量在线服务测试，耗时极长，如需完整数字建议排除网络标记后单跑。
 - [x] 密钥泄露扫描：backend/ 与 frontend/js/ 无硬编码 sk-/AK/token；Key 走用户凭据管理（localStorage + 后端转发），有 test_credential_security.py 覆盖。
 - [x] LICENSE 为 MIT，README 徽章一致。
 - [x] 作品介绍文档源文件、演示脚本、截图清单已创建（docs/competition/）。
-- [x] CN 仓 README 修正：clone 地址指向本仓、端口 8010、Issue 入口指向本仓（与代码一致）。
+- [x] README 修正：clone 地址指向本仓库、端口 8010、Issue 入口指向本仓库（与代码一致）。
 
 ## C. 需要实际运行验证（录制/提交前）
 
@@ -36,7 +36,7 @@
 - [ ] 按 screenshots.md 拍摄 10 张真实截图，插入 project-introduction.md「待补充截图」处。
 - [ ] 按 demo-script.md 录制视频并上传，取公开链接。
 - [ ] 将 project-introduction.md 导出为 PDF（建议 Typora/VS Code 插件 + Mermaid 渲染，或 pandoc；架构图用 mermaid-cli 渲染）。
-- [ ] 推送 CN 仓最新提交（当前 main 领先 origin，含测试修复与参赛材料；**我没有也不会自动推送**）。
+- [ ] 推送仓库最新提交（当前 main 领先 origin，含测试修复与参赛材料；**我没有也不会自动推送**）。
 - [ ] 打包：仓库链接 + PDF + 视频链接 → 发送 oscc@oschina.cn（截止前）。
 - [ ] 确认团队信息/负责人报名表已填写（个人参赛也需明确负责人）。
 
@@ -44,7 +44,7 @@
 
 - [ ] 作品介绍 PDF 是否有官方模板、页数/文件大小上限。
 - [ ] 演示视频时长上限与可接受的托管平台。
-- [ ] CN 发行版仓库（fork 关系）参赛是否需额外说明与主仓关系；原创性声明格式。
+- [ ] 参赛是否需提交原创性声明及其格式（待组委会明确）。
 - [ ] 截止时间的最终口径（10-11 vs 10-16 24:00）。
 
 ## F. 风险与说明
