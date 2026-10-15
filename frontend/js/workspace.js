@@ -876,7 +876,7 @@
           if (ver.commit !== 'unknown') {
             hintEl.style.cursor = 'pointer';
             hintEl.onclick = function() {
-              window.open('https://github.com/Wukeeeeee/GIS-WORKTABLE/commit/' + ver.commit, '_blank');
+              window.open('https://github.com/Wukeeeeee/GIS-WORKTABLE-CN/commit/' + ver.commit, '_blank');
             };
           }
         }
