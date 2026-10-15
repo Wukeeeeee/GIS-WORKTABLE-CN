@@ -8940,7 +8940,7 @@ def metro_line(city: str, line: str = "") -> str:
         if is_cn():
             from backend.services.metro_service import CN_CITY_CODES, norm_city
             if norm_city(city) not in CN_CITY_CODES:
-                return ("本仓默认只查询国内城市地铁（合规与网络原因）。当前支持：" +
+                return ("当前版本默认只查询国内城市地铁（合规与网络原因）。当前支持：" +
                         "、".join(sorted(CN_CITY_CODES)) +
                         "。如需开放国际城市，可设置环境变量 GISWTB_PROFILE=intl 后重启。")
     except Exception:

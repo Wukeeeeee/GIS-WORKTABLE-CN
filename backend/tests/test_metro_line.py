@@ -42,7 +42,7 @@ def test_full_network():
 
 
 def test_unsupported_city_clear_error():
-    # CN 仓：非国内城市会被合规闸门先挡下（这是预期行为，不是"暂不支持"）
+    # 非国内城市会被合规闸门先挡下（预期行为，不是"暂不支持"）
     r = _inv("亚特兰蒂斯")
     assert ("境外" in r) or ("只查询国内" in r), r
 
