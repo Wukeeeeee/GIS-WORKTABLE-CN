@@ -23,7 +23,7 @@
 
 > Open-source GIS workbench combining natural-language AI agents and manual tools for geospatial processing, analysis, and 2D/3D visualization.
 
-Description 用一至两句说明“是什么、解决什么问题、主要方式”，不堆版本号、动态数量、获奖预期或“最强/全自动/百分百准确”等无法核验的措辞。
+Description 用一至两句说明“是什么、解决什么问题、主要方式”，不堆版本号、动态数量、荣誉预期或“最强/全自动/百分百准确”等无法核验的措辞。
 
 推荐 Topics：`gis`、`geospatial`、`spatial-analysis`、`ai-agent`、`langgraph`、`fastapi`、`leaflet`、`cesium`、`mcp`。这些是建议值，本次文档修改不会自动同步 GitHub About。
 
