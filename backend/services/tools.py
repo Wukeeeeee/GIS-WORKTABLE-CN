@@ -8925,8 +8925,47 @@ def fetch_osm_boundary_or_features(query: str, feature_type: str = "boundary", b
         return f"OSM 抓取异常: {str(e)[:300]}"
 
 
+# 工具: metro_line  地铁线路查询与上图（国内高德 / 国际 OSM 双源）
+# ============================================================
+@tool
+def metro_line(city: str, line: str = "") -> str:
+    """查询城市地铁线路并上图（站序连线 + 站点图层，官方配色）。
+    - city: 城市名（如 长沙/北京/上海/广州/深圳 等国内城市；柏林/东京/纽约 等国际城市）。
+    - line: 线路名或编号（如 '1号线' / '2'）；留空 = 展示全城线网。
+    国内城市走高德地铁数据（GCJ-02 自动转 WGS-84），国际城市走 OSM Overpass（真实轨道折线，带官方色）。
+    结果含站点数、起讫站、换乘站标记。"""
+    # === CN 合规闸门：cn / competition profile 下不查询境外地铁数据 ===
+    try:
+        from backend.services.cn_profile import is_cn
+        if is_cn():
+            from backend.services.metro_service import CN_CITY_CODES, norm_city
+            if norm_city(city) not in CN_CITY_CODES:
+                return ("本仓默认只查询国内城市地铁（合规与网络原因）。当前支持：" +
+                        "、".join(sorted(CN_CITY_CODES)) +
+                        "。如需开放国际城市，可设置环境变量 GISWTB_PROFILE=intl 后重启。")
+    except Exception:
+        pass
+    try:
+        from backend.services.metro_service import build_metro_layers, norm_city, CN_CITY_CODES, INTL_CITY_BBOX
+        cnorm = norm_city(city)
+        layers, summary = build_metro_layers(cnorm, line or "")
+        out_names = []
+        from backend.services.tools import _push_layer, _register_layer
+        for spec in layers:
+            _push_layer(spec["name"], spec["geojson"], spec["style"])
+            _register_layer(spec["name"], spec["geojson"])
+            out_names.append(spec["name"])
+        return (f"地铁线路查询完成：{summary}\n"
+                f"- 已上图 {len(out_names)} 个图层：{', '.join(out_names)}\n"
+                f"- 来源：{'高德地铁数据（坐标已转 WGS-84）' if cnorm in CN_CITY_CODES else 'OSM 开源数据'}")
+    except ValueError as e:
+        return str(e)
+    except Exception as e:
+        return f"地铁查询失败: {str(e)[:300]}"
+
 tools = [
     search_web,
+    metro_line,
     fetch_webpage,
     scrape_page,
     search_platform,
