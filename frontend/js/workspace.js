@@ -213,10 +213,10 @@
         GIS.project.save(saveName).then(function(res) {
           if (res && res.id) {
             renderRecentProjects();
-            if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('✓ 已保存工程「' + (res.name || saveName) + '」', 'system');
+            if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><path d="M20 6L9 17l-5-5"/></svg> 已保存工程「' + (res.name || saveName) + '」', 'system');
           }
         }).catch(function(err) {
-          if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('✕ 保存工程失败: ' + (err.message || err), 'system');
+          if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 保存工程失败: ' + (err.message || err), 'system');
         });
       }
     }, function(exportName) {
@@ -226,7 +226,7 @@
           if (res && res.id) {
             renderRecentProjects();
             if (GIS.project.exportCurrent) GIS.project.exportCurrent(res.id, exportName);
-            if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('✓ 已导出工程文件: ' + exportName + '.giswork', 'system');
+            if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><path d="M20 6L9 17l-5-5"/></svg> 已导出工程文件: ' + exportName + '.giswork', 'system');
           }
         });
       }
@@ -285,7 +285,7 @@
             if (res && res.id && GIS.project && GIS.project.loadProject) {
               GIS.project.loadProject(res.id);
             } else if (res && res.name) {
-              if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('✓ 已导入工程「' + res.name + '」', 'system');
+              if (GIS.chat && GIS.chat.addMessage) GIS.chat.addMessage('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><path d="M20 6L9 17l-5-5"/></svg> 已导入工程「' + res.name + '」', 'system');
               renderRecentProjects();
             }
           }).catch(function(err) {
@@ -457,7 +457,7 @@
     }
     const rawMessage = error ? (error.message || String(error)) : String(result && result.response || '处理结束，未返回说明。');
     const statLabels = {count:'记录数', non_null:'有效值', null:'空值', min:'最小值', max:'最大值', mean:'平均值', sum:'总和', std:'标准差'};
-    const message = rawMessage.replace(/^\s*📊\s*/u, '').replace(/^(\s*)(count|non_null|null|min|max|mean|sum|std):/gm,
+    const message = rawMessage.replace(/^\s*[\p{S}\uFE0F]+\s*/u, '').replace(/^(\s*)(count|non_null|null|min|max|mean|sum|std):/gm,
       function(_, space, key) { return space+statLabels[key]+'：'; });
     const failed = !!error || (result && result.ok === false) || /^(?:[^\n:：]{0,24}失败[:：]|未找到|工具执行失败|错误[:：])/.test(message.trim());
     const count = result && result.layers ? result.layers.length : 0;
@@ -538,6 +538,11 @@
     const panel = document.getElementById(panelId);
     if (!panel) return;
     panel.classList.remove('workspace-panel-folded');
+    // preparePanel 的关闭按钮会给面板加上 hidden / is-hidden / display:none!important，
+    // 这里在每次打开时清除，避免关闭后重新打开出现空白。
+    panel.classList.remove('is-hidden');
+    panel.removeAttribute('hidden');
+    if (panel.style.display === 'none') panel.style.removeProperty('display');
     const fold = panel.querySelector('.workspace-panel-fold');
     if (fold) {
       fold.title = fold.title.replace(/^展开/, '折叠');
@@ -546,7 +551,7 @@
     }
   }
   function keepPanelsVisible() {
-    document.querySelectorAll('#spatialPanelContainer, #networkPanelContainer, #spatialStatsPanelContainer, #rasterToolsPanelContainer, #debugPanel').forEach(function(container) {
+    document.querySelectorAll('#spatialPanelContainer, #networkPanelContainer, #spatialStatsPanelContainer, #rasterToolsPanelContainer, #analysisToolsPanelContainer, #debugPanel').forEach(function(container) {
       if (!container.getClientRects().length || !container.offsetHeight) return;
       const r = container.getBoundingClientRect();
       const pos = clampPanel(container, r.left, r.top, r.width);
@@ -742,11 +747,11 @@
             visible: true
           });
         }
-        if (feedback) feedback.textContent = '✓ 已加载 ' + info.name + '，可前往图层面板或直接在地图查看';
+        if (feedback) feedback.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><path d="M20 6L9 17l-5-5"/></svg> 已加载 ' + info.name + '，可前往图层面板或直接在地图查看';
         setTimeout(function() { if (feedback) feedback.textContent = ''; }, 4000);
       })
       .catch(function(err) {
-        if (feedback) feedback.textContent = '✕ 加载失败: ' + err.message;
+        if (feedback) feedback.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 加载失败: ' + err.message;
       });
   }
   function button(action, label, glyph, detail) {

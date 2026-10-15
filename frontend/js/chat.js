@@ -417,7 +417,7 @@ if (typeof marked !== 'undefined') {
     _skillChips.forEach(function(chip, i) {
       const el = document.createElement('span');
       el.className = 'skill-chip';
-      el.innerHTML = '/<span class="chip-name">' + chip.name + '</span><span class="chip-close" data-i="' + i + '">✕</span>';
+      el.innerHTML = '/<span class="chip-name">' + chip.name + '</span><span class="chip-close" data-i="' + i + '" role="button" tabindex="0" aria-label="移除技能标签" title="移除" style="display:inline-flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:0;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>';
       el.querySelector('.chip-close').addEventListener('click', function(e) {
         e.stopPropagation();
         _removeChip(i);
@@ -851,13 +851,13 @@ if (typeof marked !== 'undefined') {
                 lastStepEl = stepEl;
               } else if (evt.type === 'tool_end') {
                 if (lastStepEl) {
-                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);">✓</span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(evt.name) + ' 完成</span>';
+                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);display:inline-flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg></span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(evt.name) + ' 完成</span>';
                   lastStepEl.style.fontWeight = 'normal';
                   lastStepEl.style.color = 'var(--ui-gray-400)';
                 }
               } else if (evt.type === 'verifying') {
                 if (lastStepEl) {
-                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);">✓</span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(evt.name) + ' 完成</span>';
+                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);display:inline-flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg></span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(evt.name) + ' 完成</span>';
                   lastStepEl.style.fontWeight = 'normal';
                   lastStepEl.style.color = 'var(--ui-gray-400)';
                 }
@@ -999,8 +999,8 @@ if (typeof marked !== 'undefined') {
               var b = document.createElement('button');
               b.type = 'button';
               var isConfigured = opt.configured;
-              var labelText = opt.label + (opt.configured === true ? ' ✓' : (opt.configured === false ? ' (未配置)' : ''));
-              b.textContent = labelText;
+              var labelText = GIS.utils.escapeHtml(opt.label) + (opt.configured === true ? ' ' + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg>' : (opt.configured === false ? ' (未配置)' : ''));
+              b.innerHTML = labelText;
               b.title = opt.desc || opt.label;
               b.style.cssText =
                 'border-radius:14px;padding:6px 16px;font-size:12px;cursor:pointer;transition:all 0.15s;' +
@@ -1052,8 +1052,8 @@ if (typeof marked !== 'undefined') {
               };
               return b;
             };
-            bar.appendChild(mkBtn('✓ 加载到地图', '继续', true));
-            bar.appendChild(mkBtn('✕ 取消', '取消', false));
+            bar.appendChild(mkBtn('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg> 加载到地图', '继续', true));
+            bar.appendChild(mkBtn('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 取消', '取消', false));
           }
           bubbleEl2.appendChild(bar);
         } catch (e) { /* 按钮渲染失败不阻塞回复 */ }
@@ -1545,11 +1545,11 @@ if (typeof marked !== 'undefined') {
           detailPanel.style.cssText = 'display:none;margin-top:8px;padding:8px 12px;border-radius:6px;font-size:11px;line-height:1.6;background:var(--ui-gray-50,#f9fafb);border:1px solid var(--ui-gray-200,#e5e7eb);color:var(--ui-gray-700,#374151);';
 
           // 精致轻量 SVG 图标
-          var svgCheck = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
-          var svgWarn = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
-          var svgAlert = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
-          var svgChevron = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;transition:transform 0.2s;"><polyline points="6 9 12 15 18 9"></polyline></svg>';
-          var svgDoc = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>';
+          var svgCheck = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
+          var svgWarn = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
+          var svgAlert = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+          var svgChevron = '<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;transition:transform 0.2s;"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+          var svgDoc = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>';
 
           if (hasError) {
             pill.style.background = '#fef2f2';
@@ -1984,7 +1984,7 @@ if (typeof marked !== 'undefined') {
       badge.className = 'token-usage-badge' + (isEst ? ' estimate' : '');
       const inStr = u.input_tokens >= 1000 ? (u.input_tokens / 1000).toFixed(1) + 'k' : u.input_tokens;
       const outStr = u.output_tokens >= 1000 ? (u.output_tokens / 1000).toFixed(1) + 'k' : u.output_tokens;
-      badge.textContent = (isEst ? '≈' : '⚡') + ' ↑' + inStr + ' ↓' + outStr + ' tok';
+      badge.innerHTML = (isEst ? '≈' : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>') + ' ↑' + inStr + ' ↓' + outStr + ' tok';
       badge.title = (isEst ? '【估算 Token (字符÷3.0)】' : '【真实 API Token】') +
         '\n• 输入 (Prompt): ' + u.input_tokens + ' tok' +
         '\n• 输出 (Completion): ' + u.output_tokens + ' tok' +
@@ -2277,7 +2277,7 @@ if (typeof marked !== 'undefined') {
     // 地理质量自检警告：显式展示，不静默吞掉可疑数据
     (result.qa_warnings || []).forEach(function (w) {
       if (window.GIS.chat && window.GIS.chat.addMessage) {
-        window.GIS.chat.addMessage('⚠ 质量提示[' + (w.layer || '') + ']: ' + w.warning, 'system');
+        window.GIS.chat.addMessage('<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 质量提示[' + (w.layer || '') + ']: ' + w.warning, 'system');
       }
     });
     if (window.GIS.history && typeof window.GIS.history.refresh === 'function') {

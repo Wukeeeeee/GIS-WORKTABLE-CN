@@ -3079,27 +3079,60 @@ def spatial_buffer(layer_name: str, distance: float, unit: str = "m", dissolve: 
     - dissolve: 是否融合重叠缓冲区多边形（默认 False，保留各要素独立缓冲区）。"""
     try:
         import geopandas as gpd
+        from backend.services.spatial_robust import repair_geometry, estimate_tier, robust_note
         gdf, name = _layer_to_gdf(layer_name)
         if gdf is None:
             return name
+        gdf, rstats = repair_geometry(gdf)
+        if len(gdf) == 0:
+            return f"缓冲区分析失败: 图层「{name}」没有有效几何"
+        tier = estimate_tier(gdf)
         distance_m = distance * 1000 if unit == "km" else distance
         import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
         # 用 bounds 中心确定 UTM 带号（避免在 geographic CRS 下计算 centroid 的 warning）
         _b = gdf.total_bounds
         lon, lat = (_b[0] + _b[2]) / 2, (_b[1] + _b[3]) / 2
         crs_utm = _get_utm_crs(lon, lat)
         gdf_utm = gdf.to_crs(crs_utm)
-        gdf_utm["geometry"] = gdf_utm.geometry.buffer(distance_m)
+        _cstats = None
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            if tier["tier"] == "chunked":
+                _buf_parts = []
+                _minx, _miny, _maxx, _maxy = gdf_utm.total_bounds
+                _dx = (_maxx - _minx) / 4 or 1.0
+                _dy = (_maxy - _miny) / 4 or 1.0
+                from shapely.geometry import box as _box
+                _okc = 0
+                for _i in range(4):
+                    for _j in range(4):
+                        _cell = _box(_minx + _i * _dx, _miny + _j * _dy,
+                                     _minx + (_i + 1) * _dx, _miny + (_j + 1) * _dy)
+                        _sub = gdf_utm[gdf_utm.geometry.intersects(_cell)]
+                        if len(_sub) == 0:
+                            continue
+                        try:
+                            _part = _sub.copy()
+                            _part["geometry"] = _sub.geometry.buffer(distance_m)
+                            _buf_parts.append(_part)
+                            _okc += 1
+                        except Exception:
+                            pass
+                import pandas as _pd
+                _cstats = {"cells": 16, "ok_cells": _okc, "failed_cells": 16 - _okc}
+                if _buf_parts:
+                    gdf_utm = _pd.concat(_buf_parts, ignore_index=True)
+                    gdf_utm = gpd.GeoDataFrame(gdf_utm, geometry="geometry", crs=crs_utm)
+                    gdf_utm = gdf_utm.drop_duplicates(subset="geometry")
+            else:
+                gdf_utm["geometry"] = gdf_utm.geometry.buffer(distance_m)
         if dissolve:
             gdf_utm = gpd.GeoDataFrame({"geometry": [gdf_utm.union_all()]}, geometry="geometry", crs=crs_utm)
         gdf_wgs = gdf_utm.to_crs("EPSG:4326")
         result_name = f"{name}_缓冲区"
         _gdf_to_layer(gdf_wgs, result_name)
-        return f"已为「{name}」创建{distance}{unit}缓冲区，{len(gdf_wgs)} 个要素，已加载到地图"
+        _note = robust_note(rstats, tier, _cstats)
+        return f"已为「{name}」创建{distance}{unit}缓冲区，{len(gdf_wgs)} 个要素，已加载到地图{_note}"
     except Exception as e:
         import traceback
         return f"缓冲区分析失败: {str(e)[:300]}\n{traceback.format_exc()[:200]}"
@@ -3439,11 +3472,23 @@ def spatial_intersect(layer_a: str, layer_b: str) -> str:
     - layer_a / layer_b: 待求交的两图层名。"""
     try:
         import geopandas as gpd
+        from backend.services.spatial_robust import repair_geometry, estimate_tier, chunked_overlay, robust_note
         gdf_a, name_a = _layer_to_gdf(layer_a)
         if gdf_a is None: return name_a
         gdf_b, name_b = _layer_to_gdf(layer_b)
         if gdf_b is None: return name_b
-        result = gpd.overlay(gdf_a, gdf_b, how="intersection")
+        gdf_a, rsa = repair_geometry(gdf_a)
+        gdf_b, rsb = repair_geometry(gdf_b)
+        rstats = {"repaired": rsa["repaired"] + rsb["repaired"],
+                  "dropped": rsa["dropped"] + rsb["dropped"]}
+        if len(gdf_a) == 0 or len(gdf_b) == 0:
+            return "相交分析失败: 输入图层没有有效几何"
+        tier = estimate_tier(gdf_a if len(gdf_a) >= len(gdf_b) else gdf_b)
+        _cstats = None
+        if tier["tier"] == "chunked":
+            result, _cstats = chunked_overlay(gdf_a, gdf_b, lambda a, b: gpd.overlay(a, b, how="intersection"))
+        else:
+            result = gpd.overlay(gdf_a, gdf_b, how="intersection")
         if result.empty:
             return f"「{name_a}」和「{name_b}」没有重叠区域"
         result_name = f"{name_a}_∩_{name_b}"
@@ -3461,6 +3506,9 @@ def spatial_intersect(layer_a: str, layer_b: str) -> str:
             if area_b:
                 stat.append(f"- 占「{name_b}」面积的 {res_area/area_b*100:.2f}%")
         stat.append(f"- 输入图层：{name_a}（{len(gdf_a)} 要素）、{name_b}（{len(gdf_b)} 要素）")
+        _note = robust_note(rstats, tier, _cstats)
+        if _note:
+            stat.append(_note.strip("（）"))
         return "\n".join(stat)
     except Exception as e:
         return f"相交分析失败: {str(e)[:300]}"
@@ -3475,14 +3523,27 @@ def spatial_union(layer_a: str, layer_b: str) -> str:
     """合并两个图层的全部几何区域。"""
     try:
         import geopandas as gpd
+        from backend.services.spatial_robust import repair_geometry, estimate_tier, chunked_overlay, robust_note
         gdf_a, name_a = _layer_to_gdf(layer_a)
         if gdf_a is None: return name_a
         gdf_b, name_b = _layer_to_gdf(layer_b)
         if gdf_b is None: return name_b
-        result = gpd.overlay(gdf_a, gdf_b, how="union")
+        gdf_a, rsa = repair_geometry(gdf_a)
+        gdf_b, rsb = repair_geometry(gdf_b)
+        rstats = {"repaired": rsa["repaired"] + rsb["repaired"],
+                  "dropped": rsa["dropped"] + rsb["dropped"]}
+        if len(gdf_a) == 0 or len(gdf_b) == 0:
+            return "合并失败: 输入图层没有有效几何"
+        tier = estimate_tier(gdf_a if len(gdf_a) >= len(gdf_b) else gdf_b)
+        _cstats = None
+        if tier["tier"] == "chunked":
+            result, _cstats = chunked_overlay(gdf_a, gdf_b, lambda a, b: gpd.overlay(a, b, how="union"))
+        else:
+            result = gpd.overlay(gdf_a, gdf_b, how="union")
         result_name = f"{name_a}_∪_{name_b}"
         _gdf_to_layer(result, result_name)
-        return f"合并完成：{len(result)} 个要素，已加载到地图"
+        _note = robust_note(rstats, tier, _cstats)
+        return f"合并完成：{len(result)} 个要素，已加载到地图{_note}"
     except Exception as e:
         return f"合并失败: {str(e)[:300]}"
 
@@ -3496,11 +3557,23 @@ def spatial_difference(layer_a: str, layer_b: str) -> str:
     """用 layer_a 减去 layer_b，返回 layer_a 中不在 layer_b 内的部分。"""
     try:
         import geopandas as gpd
+        from backend.services.spatial_robust import repair_geometry, estimate_tier, chunked_overlay, robust_note
         gdf_a, name_a = _layer_to_gdf(layer_a)
         if gdf_a is None: return name_a
         gdf_b, name_b = _layer_to_gdf(layer_b)
         if gdf_b is None: return name_b
-        result = gpd.overlay(gdf_a, gdf_b, how="difference")
+        gdf_a, rsa = repair_geometry(gdf_a)
+        gdf_b, rsb = repair_geometry(gdf_b)
+        rstats = {"repaired": rsa["repaired"] + rsb["repaired"],
+                  "dropped": rsa["dropped"] + rsb["dropped"]}
+        if len(gdf_a) == 0 or len(gdf_b) == 0:
+            return "差异分析失败: 输入图层没有有效几何"
+        tier = estimate_tier(gdf_a if len(gdf_a) >= len(gdf_b) else gdf_b)
+        _cstats = None
+        if tier["tier"] == "chunked":
+            result, _cstats = chunked_overlay(gdf_a, gdf_b, lambda a, b: gpd.overlay(a, b, how="difference"))
+        else:
+            result = gpd.overlay(gdf_a, gdf_b, how="difference")
         if result.empty:
             return f"「{name_a}」完全被「{name_b}」覆盖，无剩余部分"
         result_name = f"{name_a}_减_{name_b}"
@@ -3514,6 +3587,9 @@ def spatial_difference(layer_a: str, layer_b: str) -> str:
             if area_a:
                 line += f"（占「{name_a}」的 {res_area/area_a*100:.2f}%）"
             stat.append(line)
+        _note = robust_note(rstats, tier, _cstats)
+        if _note:
+            stat.append(_note.strip("（）"))
         return "\n".join(stat)
     except Exception as e:
         return f"差异分析失败: {str(e)[:300]}"
@@ -3528,11 +3604,23 @@ def spatial_clip(layer_name: str, clip_layer: str) -> str:
     """用 clip_layer 的边界裁剪 layer_name。"""
     try:
         import geopandas as gpd
+        from backend.services.spatial_robust import repair_geometry, estimate_tier, chunked_overlay, robust_note
         gdf, name = _layer_to_gdf(layer_name)
         if gdf is None: return name
         clip_gdf, clip_name = _layer_to_gdf(clip_layer)
         if clip_gdf is None: return clip_name
-        result = gpd.clip(gdf, clip_gdf)
+        gdf, rsa = repair_geometry(gdf)
+        clip_gdf, rsb = repair_geometry(clip_gdf)
+        rstats = {"repaired": rsa["repaired"] + rsb["repaired"],
+                  "dropped": rsa["dropped"] + rsb["dropped"]}
+        if len(gdf) == 0 or len(clip_gdf) == 0:
+            return "裁剪失败: 输入图层没有有效几何"
+        tier = estimate_tier(gdf if len(gdf) >= len(clip_gdf) else clip_gdf)
+        _cstats = None
+        if tier["tier"] == "chunked":
+            result, _cstats = chunked_overlay(gdf, clip_gdf, lambda a, b: gpd.clip(a, b))
+        else:
+            result = gpd.clip(gdf, clip_gdf)
         if result.empty:
             return f"裁剪后无剩余要素（「{name}」不在「{clip_name}」范围内）"
         result_name = f"{name}_裁剪"
@@ -3546,6 +3634,9 @@ def spatial_clip(layer_name: str, clip_layer: str) -> str:
             if src_area:
                 line += f"（占原图层的 {res_area/src_area*100:.2f}%）"
             stat.append(line)
+        _note = robust_note(rstats, tier, _cstats)
+        if _note:
+            stat.append(_note.strip("（）"))
         return "\n".join(stat)
     except Exception as e:
         return f"裁剪失败: {str(e)[:300]}"
@@ -10453,6 +10544,15 @@ def od_cost_matrix(origins_layer: str, destinations_layer: str, network_source: 
     输出：<临时输出目录>/stats/od/<起点>_<终点>_od_matrix.csv 与同名 .json，并返回总/平均/最大出行成本（米）与不可达对数。
     注意：本工具只产出磁盘文件，不生成地图图层。
     """
+    # === CN 合规闸门：默认/比赛环境不自动接入 OSM 路网数据 ===
+    try:
+        from backend.services.cn_profile import is_cn
+        if is_cn() and str(network_source or "osm").strip().lower() == "osm":
+            return ("当前版本默认不自动匹配 OSM 路网（合规与网络原因）。"
+                    "请先上传或使用离线/国内路网图层，并把 network_source 指定为该图层名；"
+                    "如需开放 OSM 路网，可设置环境变量 GISWTB_PROFILE=intl 后重启。")
+    except Exception:
+        pass
     try:
         import numpy as np
         import csv as _csv

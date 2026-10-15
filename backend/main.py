@@ -1599,6 +1599,11 @@ async def api_tools_invoke(request: ToolInvokeRequest):
     args = request.arguments or {}
     if not isinstance(args, dict):
         raise HTTPException(status_code=400, detail="arguments 应为对象")
+    # 参数角色校验（ESRI 式参数类型系统的最小可用版）：只提示 + 自动纠错，不拦截
+    from backend.services.tool_args_guard import validate_tool_args
+    args, _arg_warnings = validate_tool_args(request.name, args)
+    if _arg_warnings:
+        args["_param_warnings"] = _arg_warnings
     reset_state()
     loop = asyncio.get_event_loop()
     try:
@@ -1612,6 +1617,7 @@ async def api_tools_invoke(request: ToolInvokeRequest):
     return {
         "ok": ok,
         "tool": request.name,
+        "param_warnings": _arg_warnings if _arg_warnings else [],
         "response": response,
         "layers": pending.get("layers", []),
         "layer_ops": pending.get("layer_ops", []),
