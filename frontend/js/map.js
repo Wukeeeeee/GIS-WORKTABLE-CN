@@ -1,5 +1,5 @@
 /**
- * GIS AI WorkTable — 地图模块（本仓）
+ * GIS AI WorkTable - 地图模块
  * Leaflet 封装。底图白名单（合规硬约束）：高德影像/矢量（免 Key）、天地图（需 tk，官方口径）。
  * 纯影像底图不含国界线；天地图注记边界为中国官方口径。Esri/Bing/OSM 底图不在 CN 默认选项中。
  *

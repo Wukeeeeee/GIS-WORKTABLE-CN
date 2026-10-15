@@ -540,7 +540,7 @@ def search_web(query: str) -> str:
     except Exception:
         content = ""
 
-    # 本仓移除 Yandex 降级：外部搜索引擎在网络受限环境下不可达，失败还要白耗 20 秒超时
+    # 已移除 Yandex 降级：外部搜索引擎在网络受限环境下不可达，失败还要白耗 20 秒超时
 
     if not content:
         return "错误：搜索失败（Bing 中国未返回有效结果）"
@@ -8921,7 +8921,7 @@ def fetch_gis_data_url(
 
 @tool
 def search_global_entities(query: str, lang: str = "zh") -> str:
-    """全球开放地理实体与维基百科知识图谱检索（免 Key、全球覆盖）。注意：依赖外部服务（Wikidata），在网络受限环境下不可达；且外部实体数据的行政区划/国家标签口径不符合中国官方标准，本仓默认不启用。
+    """全球开放地理实体与维基百科知识图谱检索（免 Key、全球覆盖）。注意：依赖外部服务（Wikidata），在网络受限环境下不可达；且外部实体数据的行政区划/国家标签口径不符合中国官方标准，当前档位默认不启用。
     检索全球任意国家、山川河流、地标名胜、岛屿、行政区划，提取 Wikidata 经纬度坐标、实体定义与维基百科简介。
     用户查询全球地理实体或问"XX 在哪里/XX 的百科信息"时调用。"""
     try:
@@ -8957,7 +8957,7 @@ def search_global_entities(query: str, lang: str = "zh") -> str:
 
 @tool
 def fetch_osm_boundary_or_features(query: str, feature_type: str = "boundary", bbox: str = "", limit: int = 200, auto_render: bool = True) -> str:
-    """全球开放街道地图（OSM）行政区划多边形边界与矢量要素抽取（免 Key）。注意：依赖外部服务（Nominatim/Overpass），在网络受限环境下不可达；且 OSM 行政边界画法不符合中国官方标准，本仓默认停用。
+    """全球开放街道地图（OSM）行政区划多边形边界与矢量要素抽取（免 Key）。注意：依赖外部服务（Nominatim/Overpass），在网络受限环境下不可达；且 OSM 行政边界画法不符合中国官方标准，当前档位默认停用。
     query: 地名（如 'Taiwan', 'Tokyo', 'Paris'）；feature_type: boundary（行政边界）/ roads（道路网）/ buildings（建筑物）/ water（水系）；
     bbox: 可选空间范围；limit: 要素上限；auto_render: 是否自动上图（默认 True）。
     用户需要拉取全球任意区域边界或 OSM 矢量时调用。"""
@@ -9057,7 +9057,7 @@ def metro_line(city: str, line: str = "") -> str:
 
 
 # ============================================================
-# 分析工具集（20 个）与其辅助函数：与国际版保持一致
+# 分析工具集（20 个）与其辅助函数
 # 数据源合规由 cn_profile 闸门统一控制（见 od_cost_matrix）
 # ============================================================
 
