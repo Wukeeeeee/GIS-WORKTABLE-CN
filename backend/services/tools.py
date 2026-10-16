@@ -188,6 +188,8 @@ _clear_layers_flag: bool = False
 _pending_layer_ops: list = []
 _current_amap_key: str = ""
 _search_call_count: int = 0    # 搜索次数计数，每次请求重置
+_search_last_hit: dict = {}       # 引擎名 -> 上次请求时间（限速防验证码）
+_ENGINE_MIN_INTERVAL = 1.5        # 同一引擎两次请求最小间隔（秒）
 _exec_call_count: int = 0       # Python 执行次数计数，每次请求重置
 _exec_log: list = []            # 执行日志：记录每次execute_python的用途和结果
 _temp_output_dir: str = ""          # 在 reset_state 时设置
@@ -519,35 +521,198 @@ def _add_pending_item(url: str, file_path: str = None):
 
 
 # ============================================================
-# 工具: search_web — 必应搜索
+# 工具: search_web — 多引擎搜索
 # ============================================================
+
+def _baidu_html_search(query: str, timeout: float = 12.0) -> str:
+    """百度网页搜索兜底：解析结果页的标题/摘要（带 UA，失败返回空）。"""
+    import requests
+    from bs4 import BeautifulSoup
+    url = "https://www.baidu.com/s?wd=" + requests.utils.quote(query) + "&rn=10"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        if resp.status_code != 200 or not resp.text:
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+        out = []
+        for h3 in soup.select("h3.c-title-font, h3.t, div.result h3, div.c-container h3")[:10]:
+            a = h3.find("a")
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            link = a.get("href", "")
+            container = h3.find_parent(["div", "td"])
+            desc = ""
+            if container:
+                for sel in (".c-abstract", ".c_span9", "[class*=content-right]", "[class*=abstract]"):
+                    node = container.select_one(sel)
+                    if node and node.get_text(strip=True):
+                        desc = node.get_text(strip=True)
+                        break
+            if title:
+                out.append(f"- {title}\n  链接: {link}\n  摘要: {desc}")
+        return "\n".join(out)
+    except Exception:
+        return ""
+
+
+def _sogou_html_search(query: str, timeout: float = 12.0) -> str:
+    """搜狗网页搜索兜底：解析结果页的标题/摘要（失败返回空）。"""
+    import requests
+    from bs4 import BeautifulSoup
+    url = "https://www.sogou.com/web?query=" + requests.utils.quote(query)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        if resp.status_code != 200 or not resp.text:
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+        out = []
+        for vrwrap in soup.select("div.vrwrap, div.rb")[:10]:
+            h3 = vrwrap.select_one("h3")
+            if not h3:
+                continue
+            a = h3.find("a")
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            link = a.get("href", "")
+            if link and not link.startswith("http"):
+                link = "https://www.sogou.com" + link
+            desc_node = vrwrap.select_one(".str-text-info, .space-txt, p.str_info")
+            desc = desc_node.get_text(strip=True) if desc_node else ""
+            if title:
+                out.append(f"- {title}\n  链接: {link}\n  摘要: {desc}")
+        return "\n".join(out)
+    except Exception:
+        return ""
+
+
+def _cn_bing_search(query: str, timeout: float = 12.0) -> str:
+    """Bing 中国站搜索兜底：只访问 cn.bing.com，解析结果页标题/摘要（失败返回空）。"""
+    import requests
+    from bs4 import BeautifulSoup
+    url = "https://cn.bing.com/search?q=" + requests.utils.quote(query)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        if resp.status_code != 200 or not resp.text:
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+        out = []
+        for li in soup.select("li.b_algo")[:10]:
+            a = li.select_one("h2 a")
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            link = a.get("href", "")
+            desc_node = li.select_one(".b_caption p")
+            desc = desc_node.get_text(strip=True) if desc_node else ""
+            if title:
+                out.append(f"- {title}\n  链接: {link}\n  摘要: {desc}")
+        return "\n".join(out)
+    except Exception:
+        return ""
+
+
+def _query_tokens(query: str) -> list:
+    """把查询拆成关键词 token（去空白/标点，保留 >=2 字符的段）。"""
+    import re as _re2
+    raw = _re2.split(r"[\s，。、,\.\?\?！!：:;\"'（）()　]+", query)
+    toks = []
+    for t in raw:
+        t = t.strip()
+        if len(t) >= 2:
+            # 去掉常见后缀让匹配更宽容（"2024年""2024"，"GDP的""GDP"）
+            t2 = t.rstrip("年的中之和与")
+            if len(t2) >= 2:
+                toks.append(t2)
+            else:
+                toks.append(t)
+    return list(dict.fromkeys(toks))  # 去重保序
+
+
+def _relevance_score(text: str, tokens: list) -> float:
+    """结果文本中命中的查询关键词比例（0~1）。"""
+    if not tokens:
+        return 0.0
+    low = text.lower()
+    hit = sum(1 for t in tokens if t.lower() in low)
+    return hit / len(tokens)
+
+
+_JUNK_MARKERS = (
+    "404 Not Found", "403 Forbidden", "Access Denied", "访问被拒绝",
+    "页面不存在", "无法找到该页面", "系统发生错误", "Service Unavailable",
+    "Just a moment...", "请开启 JavaScript", "安全验证", "human verification",
+)
+
+
+def _looks_like_junk(text: str) -> bool:
+    """检测 404/403/反爬验证等无效页面，避免把错误页当正文喂给模型。"""
+    if not text:
+        return True
+    head = text[:300].lower()
+    if len(text.strip()) < 80:
+        # 极短页面几乎必为错误页/空壳
+        return True
+    for m in _JUNK_MARKERS:
+        if m.lower() in head:
+            return True
+    return False
+
 
 @tool
 def search_web(query: str) -> str:
-    """搜索网络信息，返回网页标题/链接/摘要。用于搜索最新新闻、数据、资料。涉及其他地区内容用中英文搜。"""
+    """搜索网络信息，返回网页标题、链接/摘要。多引擎自动降级 + 相关性评分：
+    百度 -> 搜狗 -> cn.bing.com。结果须命中查询关键词一半以上才算数，全部不合格时
+    回退到最相关的一份；返回结构化摘要，避免把错误页/验证页当正文。"""
     global _search_call_count
     _search_call_count += 1
     if _search_call_count > 30:
         return "【搜索过热】已搜索太多次，请基于已有信息继续处理。"
 
-    # 搜 Bing
-    content = ""
-    try:
-        url = f"https://cn.bing.com/search?q={query.replace(' ', '+')}"
-        content = fetch_webpage_impl(url)
-        if content.startswith("错误") or len(content) < 200:
-            content = ""
-    except Exception:
-        content = ""
+    engines = [
+        ("百度", _baidu_html_search),
+        ("搜狗", _sogou_html_search),
+        ("Bing 中国", _cn_bing_search),
+    ]
+    tokens = _query_tokens(query)
+    threshold = 0.5
+    best_text, best_score, best_name = "", -1.0, ""
+    for name, fn in engines:
+        try:
+            _engine_throttle(name)
+            results = fn(query)
+            if not results or not results.strip() or _looks_like_junk(results):
+                continue
+            score = _relevance_score(results, tokens)
+            print(f"[GIS] search_web 引擎 {name} 相关性 {score:.2f} (query: {query[:40]})", flush=True)
+            if score > best_score:
+                best_text, best_score, best_name = results, score, name
+            if score >= threshold:
+                break  # 足够相关，立即采用
+        except Exception as e:
+            print(f"[GIS] search_web 引擎 {name} 异常: {str(e)[:100]}", flush=True)
+            continue
 
-    # 已移除 Yandex 降级：外部搜索引擎在网络受限环境下不可达，失败还要白耗 20 秒超时
+    if best_text and best_score > 0.05:
+        return f"[搜索结果 | {best_name} | 相关性 {best_score:.0%}]\n{best_text}"
 
-    if not content:
-        return "错误：搜索失败（Bing 中国未返回有效结果）"
-
-    if len(content) > 6000:
-        content = content[:6000] + "\n\n...(内容过长，已截断)"
-    return content
+    # 所有引擎均无有效结果：明确失败，不把错误页当正文
+    return ("错误：搜索失败（所有引擎均无有效结果，可能网络受限或关键词过于冷门）。"
+            "建议：1) 换个关键词 2) 若已有足够信息请直接分析，不要反复搜索。")
 
 
 # ============================================================
@@ -581,7 +746,7 @@ def fetch_webpage_impl(url: str, max_length: int = 10000) -> str:
     # 方案 A：Scrapling
     try:
         from scrapling.fetchers import Fetcher
-        page = Fetcher.get(url, timeout=20)
+        page = Fetcher.get(url, timeout=15)
         if page.status == 200:
             html = str(page.html_content)
             if html and len(html) > 50:
@@ -659,7 +824,7 @@ def scrape_page(url: str, selector: str = "body") -> str:
     """使用 Scrapling 隐身引擎抓取网页（TLS指纹混淆+真实浏览器UA+Cloudflare绕过），适合反爬严格的网站。比 fetch_webpage 更快更反爬"""
     try:
         from scrapling.fetchers import Fetcher
-        page = Fetcher.get(url, timeout=20)
+        page = Fetcher.get(url, timeout=15)
         if page.status != 200:
             return f"错误：HTTP {page.status}"
         elements = page.css(selector)
@@ -7312,7 +7477,7 @@ def _fetch_satellite_imagery(west, south, east, north, zoom=16, max_tiles=49, so
                     _sub += 1
                 req = urllib.request.Request(url, headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GIS-WORKTABLE/1.0",
-                    "Referer": "https://www.bing.com/maps/" if tile_source == "bing" else "",
+                    "Referer": "https://cn.bing.com/maps/" if tile_source == "bing" else "",
                 })
                 _tile_key = (tile_source, z, tx, ty)
                 if _tile_key in _tile_cache:
