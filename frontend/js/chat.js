@@ -10,6 +10,41 @@ window.GIS = window.GIS || {};
 (function() {
   'use strict';
 
+  // 消息和导入历史均视为不可信内容，只保留 Markdown 展示所需的标签。
+  function sanitizeMessageHtml(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const tags = new Set(['P','BR','STRONG','EM','B','I','DEL','S','CODE','PRE','BLOCKQUOTE','UL','OL','LI','H1','H2','H3','H4','H5','H6','HR','TABLE','THEAD','TBODY','TR','TH','TD','A','IMG','SPAN','DIV','DETAILS','SUMMARY','KBD']);
+    template.content.querySelectorAll('*').forEach(function(el) {
+      if (!tags.has(el.tagName)) { el.remove(); return; }
+      const href = el.getAttribute('href');
+      const src = el.getAttribute('src');
+      const alt = el.getAttribute('alt');
+      Array.from(el.attributes).forEach(function(a) { el.removeAttribute(a.name); });
+      if (el.tagName === 'A' && href) {
+        try {
+          const url = new URL(href, window.location.href);
+          if (url.protocol === 'https:' || url.protocol === 'http:') {
+            el.setAttribute('href', url.href);
+            el.setAttribute('target', '_blank');
+            el.setAttribute('rel', 'noopener noreferrer');
+            el.className = 'chat-markdown-link';
+          }
+        } catch (_) { /* 无效链接不保留 */ }
+      }
+      if (el.tagName === 'IMG') {
+        try {
+          const url = new URL(src || '', window.location.href);
+          if (src && url.origin === window.location.origin && /^\/(output\/|cache\/charts\/)/.test(url.pathname)) {
+            el.setAttribute('src', url.href);
+            el.setAttribute('alt', alt || '分析图件');
+          } else { el.remove(); }
+        } catch (_) { el.remove(); }
+      }
+    });
+    return template.innerHTML;
+  }
+
 // 所有外部链接新标签打开
 var _linkRenderer = null;
 if (typeof marked !== 'undefined') {
@@ -683,8 +718,10 @@ if (typeof marked !== 'undefined') {
       if (loadingContent) loadingContent.classList.add('shimmer-loading-text');
     }
 
-    // 添加翻牌计时器（实时显示 AI 思考耗时），另起一行
-    const timerEl = createFlipTimer();
+    // 紧凑耗时提示，避免执行过程挤占对话空间。
+    const timerEl = document.createElement('span');
+    timerEl.className = 'ai-elapsed';
+    timerEl.textContent = '已用时 0 秒';
     const timerWrapper = document.createElement('div');
     timerWrapper.style.cssText = 'margin-top:6px;';
     timerWrapper.appendChild(timerEl);
@@ -707,9 +744,8 @@ if (typeof marked !== 'undefined') {
     if (loadingMsg) loadingMsg._phaseTimer = phaseTimer;
     const timerInterval = setInterval(function() {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      updateFlipTimer(timerEl, elapsed);
+      timerEl.textContent = elapsed < 60 ? '已用时 ' + elapsed + ' 秒' : '已用时 ' + Math.floor(elapsed / 60) + ' 分 ' + (elapsed % 60) + ' 秒';
     }, 1000);
-    updateFlipTimer(timerEl, 0);
     if (loadingMsg) loadingMsg._timerInterval = timerInterval;
 
     try {
@@ -802,10 +838,26 @@ if (typeof marked !== 'undefined') {
         if (!streamRes.ok) throw new Error('Stream API error: ' + streamRes.status);
 
         // 实时进度：保留模型名 + 流光，下方累积工具步骤
+        var progressDetails = document.createElement('details');
+        progressDetails.className = 'ai-progress';
+        var progressSummary = document.createElement('summary');
+        progressSummary.textContent = '正在准备分析';
         var stepLog = document.createElement('div');
         stepLog.className = 'step-log';
-        stepLog.style.cssText = 'margin-top:4px;font-size:11px;line-height:1.7;';
-        if (loadingBubble) loadingBubble.insertBefore(stepLog, loadingBubble.lastChild);
+        progressDetails.appendChild(progressSummary);
+        progressDetails.appendChild(stepLog);
+        if (loadingBubble) loadingBubble.insertBefore(progressDetails, loadingBubble.lastChild);
+        var stepCount = 0;
+        var toolLabels = {
+          get_registered_layers: '查看地图图层', get_layer_detail: '读取图层信息',
+          execute_python: '计算分析', draw_feature: '绘制要素',
+          spatial_select: '筛选空间要素', spatial_join: '关联空间数据',
+          search_web: '检索参考资料', fetch_webpage: '读取参考资料',
+          inspect_satellite_image: '分析卫星影像', get_elevation_data: '获取高程数据',
+          fetch_weather_data: '查询天气', reverse_geocode: '查询位置',
+          amap_geocode: '定位地点', datav_boundary: '加载行政区划'
+        };
+        function getToolLabel(name) { return toolLabels[name] || '处理分析步骤'; }
 
         var reader = streamRes.body.getReader();
         var decoder = new TextDecoder();
@@ -842,22 +894,25 @@ if (typeof marked !== 'undefined') {
             }
             try {
               if (evt.type === 'tool_start') {
-                var toolLabel = evt.name + (evt.input ? '(' + evt.input.slice(0, 60) + ')' : '');
+                var toolLabel = getToolLabel(evt.name);
+                stepCount += 1;
+                progressSummary.textContent = toolLabel + ' · 第 ' + stepCount + ' 步';
                 var stepEl = document.createElement('div');
                 stepEl.className = 'step-item step-running';
+                stepEl.title = evt.name || '';
                 stepEl.innerHTML = "<span class=\"ui-icon\" aria-hidden=\"true\" style=\"vertical-align:-2px;margin-right:4px;;width:11px;height:11px;--ui-icon-image:url('/assets/ui-icons/icon-a53011a6a003.png')\"></span><strong>" + GIS.utils.escapeHtml(toolLabel) + '</strong>';
                 stepLog.appendChild(stepEl);
-                scrollMessages();
+                if (progressDetails.open) scrollMessages();
                 lastStepEl = stepEl;
               } else if (evt.type === 'tool_end') {
                 if (lastStepEl) {
-                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);display:inline-flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg></span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(evt.name) + ' 完成</span>';
+                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);display:inline-flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg></span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(getToolLabel(evt.name)) + ' 完成</span>';
                   lastStepEl.style.fontWeight = 'normal';
                   lastStepEl.style.color = 'var(--ui-gray-400)';
                 }
               } else if (evt.type === 'verifying') {
                 if (lastStepEl) {
-                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);display:inline-flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg></span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(evt.name) + ' 完成</span>';
+                  lastStepEl.innerHTML = '<span style="color:var(--ui-gray-400);display:inline-flex;align-items:center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M20 6L9 17l-5-5"/></svg></span> <span style="color:var(--ui-gray-500);">' + GIS.utils.escapeHtml(getToolLabel(evt.name)) + ' 完成</span>';
                   lastStepEl.style.fontWeight = 'normal';
                   lastStepEl.style.color = 'var(--ui-gray-400)';
                 }
@@ -871,17 +926,7 @@ if (typeof marked !== 'undefined') {
                 _receivedDone = true;
                 result = evt;
                 if (_streamTimeout) { clearTimeout(_streamTimeout); _streamTimeout = null; }
-                if (stepLog && stepLog.children.length > 1) {
-                  stepLog.style.maxHeight = '44px';
-                  stepLog.style.overflow = 'hidden';
-                  stepLog.style.cursor = 'pointer';
-                  stepLog.style.transition = 'max-height 0.25s';
-                  stepLog.title = '点击展开执行步骤';
-                  stepLog.addEventListener('click', function toggleLog() {
-                    var isCollapsed = stepLog.style.maxHeight === '44px';
-                    stepLog.style.maxHeight = isCollapsed ? stepLog.scrollHeight + 'px' : '44px';
-                  });
-                }
+                progressSummary.textContent = '分析步骤已结束 · 共 ' + stepCount + ' 步';
               }
             } catch (parseErr) {
               console.warn('[GIS Chat] SSE 事件处理异常:', parseErr);
@@ -958,15 +1003,15 @@ if (typeof marked !== 'undefined') {
           window._currentTaskId = null;
           window.GIS.task.updateTask(taskId, { status: 'failed', resultSummary: '会话忙，本条未执行' });
         }
-        var _busyEl = addMessage('上一条 AI 请求还在收尾（工具链尚未结束），这条消息没有执行。', 'system');
+        var _busyEl = addMessage('上一条分析正在结束，本条尚未开始。稍后可重试。', 'system', { card: true });
+        if (_busyEl) _busyEl.classList.add('ai-busy-notice');
         try {
           var _busyBar = document.createElement('div');
           _busyBar.className = 'pending-action-bar';
-          _busyBar.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;';
+          _busyBar.classList.add('ai-busy-actions');
           var _retryBtn = document.createElement('button');
           _retryBtn.type = 'button';
-          _retryBtn.className = 'chat-file-btn-primary';
-          _retryBtn.style.borderRadius = '14px';
+          _retryBtn.className = 'ai-retry-button';
           _retryBtn.textContent = '重试这条分析';
           _retryBtn.onclick = function () {
             _busyBar.remove();
@@ -979,7 +1024,7 @@ if (typeof marked !== 'undefined') {
           _dismissBtn.onclick = function () { _busyBar.remove(); };
           _busyBar.appendChild(_retryBtn);
           _busyBar.appendChild(_dismissBtn);
-          var _busyBubble = _busyEl ? (_busyEl.querySelector('.message-bubble') || _busyEl) : null;
+          var _busyBubble = _busyEl ? (_busyEl.querySelector('.system-card') || _busyEl) : null;
           if (_busyBubble) _busyBubble.appendChild(_busyBar);
         } catch (_busyErr) { /* 按钮渲染失败不影响提示 */ }
         return;
@@ -1918,17 +1963,17 @@ if (typeof marked !== 'undefined') {
         bubble.className = 'system-card';
         bubble.style.cssText = 'max-width:92%;font-size:12px;color:var(--on-surface-variant);background:var(--surface-container-low);border:1px solid var(--outline-variant);border-radius:8px;padding:10px 14px;line-height:1.6;word-break:break-word;text-align:left;white-space:normal;margin:4px auto;box-sizing:border-box;box-shadow:0 1px 3px rgba(0,0,0,0.05);';
         if (typeof marked !== 'undefined' && text.indexOf('<') === -1) {
-          bubble.innerHTML = marked.parse(text, { breaks: true, gfm: true, renderer: _linkRenderer });
+          bubble.innerHTML = sanitizeMessageHtml(marked.parse(text, { breaks: true, gfm: true, renderer: _linkRenderer }));
         } else {
-          bubble.innerHTML = text.replace(/\n/g, '<br/>');
+          bubble.innerHTML = sanitizeMessageHtml(text.replace(/\n/g, '<br/>'));
         }
       } else {
         bubble.className = 'system-pill';
         bubble.style.cssText = 'font-size:11.5px;color:var(--on-surface-variant);background:var(--surface-container-high);border:1px solid var(--outline-variant);border-radius:12px;padding:4px 14px;text-align:center;line-height:1.45;max-width:90%;white-space:normal;word-break:break-word;margin:0 auto;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;';
         if (typeof marked !== 'undefined') {
-          bubble.innerHTML = typeof marked.parseInline === 'function' ? marked.parseInline(text) : marked.parse(text);
+          bubble.innerHTML = sanitizeMessageHtml(typeof marked.parseInline === 'function' ? marked.parseInline(text) : marked.parse(text));
         } else {
-          bubble.innerHTML = text;
+          bubble.innerHTML = sanitizeMessageHtml(text);
         }
       }
       row.appendChild(bubble);
@@ -1956,9 +2001,9 @@ if (typeof marked !== 'undefined') {
     const content = document.createElement('div');
     // AI 消息渲染 Markdown（跳过加载气泡，避免 <p> 包裹破坏流光动画）
     if (type === 'ai' && !options.noMarkdown && typeof marked !== 'undefined') {
-      content.innerHTML = marked.parse(text, { breaks: true, gfm: true, renderer: _linkRenderer });
+      content.innerHTML = sanitizeMessageHtml(marked.parse(text, { breaks: true, gfm: true, renderer: _linkRenderer }));
     } else {
-      content.innerHTML = text;
+      content.innerHTML = sanitizeMessageHtml(text);
     }
     // AI 消息：自动为输出文件路径添加「打开 / 下载」跳转按钮
     if (type === 'ai') _attachOutputButtons(content);

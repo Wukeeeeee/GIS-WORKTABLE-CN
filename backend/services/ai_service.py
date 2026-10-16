@@ -743,6 +743,10 @@ def _build_system_content(cfg, message: str, session_id: str = "default", force_
         system_content = SYSTEM_PROMPT
     model_display = cfg.model
 
+    from backend.services.cn_profile import is_cn
+    if is_cn():
+        system_content += "\n【CN 数据策略，优先于通用工具说明】仅使用已批准的国内数据服务和本地数据。禁止 OSM/Nominatim/Overpass、Wikidata、Open-Meteo、USGS 和境外影像回退。Python 仅做本地分析，不可联网。工具返回策略拦截后不得用网页抓取、代码或其他工具绕过；缺少数据时说明缺项，不编造，并提示上传本地数据。"
+
     # === 可变后缀（每次追加在末尾，不影响前缀缓存） ===
     appendix_parts = []
 

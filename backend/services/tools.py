@@ -30,6 +30,8 @@ from typing import Optional, Dict, Any, List, Literal
 from pathlib import Path
 
 from langchain.tools import tool
+from backend.services.cn_profile import is_cn
+from backend.services.network_policy import data_request, NetworkPolicyError
 
 # === P2-1: 简单内存缓存 ===
 _tile_cache = {}
@@ -535,7 +537,7 @@ def _baidu_html_search(query: str, timeout: float = 12.0) -> str:
         "Accept-Language": "zh-CN,zh;q=0.9",
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=timeout)
+        resp = data_request("GET", url, headers=headers, timeout=timeout)
         if resp.status_code != 200 or not resp.text:
             return ""
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -571,7 +573,7 @@ def _sogou_html_search(query: str, timeout: float = 12.0) -> str:
         "Accept-Language": "zh-CN,zh;q=0.9",
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=timeout)
+        resp = data_request("GET", url, headers=headers, timeout=timeout)
         if resp.status_code != 200 or not resp.text:
             return ""
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -606,7 +608,7 @@ def _cn_bing_search(query: str, timeout: float = 12.0) -> str:
         "Accept-Language": "zh-CN,zh;q=0.9",
     }
     try:
-        resp = requests.get(url, headers=headers, timeout=timeout)
+        resp = data_request("GET", url, headers=headers, timeout=timeout)
         if resp.status_code != 200 or not resp.text:
             return ""
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -743,6 +745,16 @@ def _html_to_markdown(html: str, url: str = "") -> str:
 
 def fetch_webpage_impl(url: str, max_length: int = 10000) -> str:
     """获取网页内容的实现（被 search_web 和 fetch_webpage 共用）"""
+    if is_cn():
+        try:
+            response = data_request("GET", url, timeout=15)
+            try:
+                response.raise_for_status()
+                return _html_to_markdown(response.text, url)[:max_length]
+            finally:
+                response.close()
+        except Exception as exc:
+            return f"错误：{exc}"
     # 方案 A：Scrapling
     try:
         from scrapling.fetchers import Fetcher
@@ -822,6 +834,18 @@ def fetch_webpage(url: str) -> str:
 @tool
 def scrape_page(url: str, selector: str = "body") -> str:
     """使用 Scrapling 隐身引擎抓取网页（TLS指纹混淆+真实浏览器UA+Cloudflare绕过），适合反爬严格的网站。比 fetch_webpage 更快更反爬"""
+    if is_cn():
+        try:
+            from bs4 import BeautifulSoup
+            response = data_request("GET", url, timeout=15)
+            try:
+                response.raise_for_status()
+                element = BeautifulSoup(response.text, "html.parser").select_one(selector)
+                return element.get_text(" ", strip=True)[:8000] if element else "未找到匹配内容"
+            finally:
+                response.close()
+        except Exception as exc:
+            return f"错误：{exc}"
     try:
         from scrapling.fetchers import Fetcher
         page = Fetcher.get(url, timeout=15)
@@ -859,7 +883,7 @@ def search_platform(platform: str, query: str) -> str:
                 'page': 1,
             }
             url = "https://api.bilibili.com/x/web-interface/search/all/v2"
-            resp = requests.get(url, params=params, headers={
+            resp = data_request("GET", url, params=params, headers={
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Referer': 'https://www.bilibili.com/',
             }, timeout=10)
@@ -966,6 +990,14 @@ def _ast_sandbox_check(code: str) -> str | None:
         return f'沙箱拦截：代码语法错误（{e}）'
 
     for node in ast.walk(tree):
+        if is_cn():
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                modules = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
+                if any(m.split('.')[0] == 'osmnx' for m in modules):
+                    return '沙箱拦截：CN 模式禁止 OSM 在线数据获取，请上传本地路网。'
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if re.search(r'https?://|/vsi(?:curl|s3|gs|az)/', node.value, re.I):
+                    return '沙箱拦截：CN 模式的 Python 仅用于本地分析，在线数据请使用受控工具。'
         # ---- 导入检查 ----
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -1217,7 +1249,15 @@ _os.makedirs('output', exist_ok=True)
             from backend.services.matplotlib_font import get_sandbox_setup_code
             _font_setup_code = get_sandbox_setup_code()
         _setup_blocks_filled = _setup_blocks.replace('{font_setup_code}', _font_setup_code)
-        _final_code = _amap_injection + _osm_setup_code + _setup_blocks_filled.rstrip() + '\n\n' + code
+        _network_setup = ""
+        if is_cn():
+            _network_setup = '''import sys as _policy_sys
+def _deny_network(event, args):
+    if event in ('socket.connect', 'socket.getaddrinfo', 'socket.sendto'):
+        raise PermissionError('CN 模式 Python 禁止联网，请使用受控数据工具或本地数据')
+_policy_sys.addaudithook(_deny_network)
+'''
+        _final_code = _network_setup + _amap_injection + _osm_setup_code + _setup_blocks_filled.rstrip() + '\n\n' + code
 
         temp_path = os.path.join(exec_dir, '_user_code_.py')
         with open(temp_path, 'w', encoding='utf-8') as f:
@@ -1277,6 +1317,8 @@ _os.makedirs('output', exist_ok=True)
                                   "failed", stderr=stderr, exit_code=result.returncode)
                 except Exception:
                     pass
+            if 'CN 模式 Python 禁止联网' in stderr:
+                return 'CN 模式 Python 禁止联网。请使用受控数据工具或上传本地数据，不要改写代码绕过限制。'
             return f'代码执行错误（{elapsed:.1f}s）：{stderr[:2000]}\n请根据错误信息修改代码后重试。'
 
         output = result.stdout.strip()
@@ -1485,7 +1527,7 @@ address: 地址/地名（如"广州塔""广州南站"）；city: 城市名（可
         if city:
             params["city"] = city
 
-        resp = requests.get("https://restapi.amap.com/v3/geocode/geo", params=params, timeout=10)
+        resp = data_request("GET", "https://restapi.amap.com/v3/geocode/geo", params=params, timeout=10)
         data = resp.json()
 
         if data.get("status") != "1":
@@ -2706,7 +2748,6 @@ def create_chart(layer_name: str, chart_type: str = "bar", field: str = "",
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{chart_title}</title>
 <script src="{_vendor_file_uri('echarts', 'echarts.min.js')}"></script>
-<script>window.echarts || document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"><\\/script>');</script>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   html, body {{
@@ -2945,8 +2986,8 @@ location_name: 城市名（如"北京市""广州市""上海浦东新区"），�
 network_type: drive(车行路) walk(步行) bike(骑行) all(全部)，默认 drive。"""
     # 比赛/展示 profile：外部在线数据源整体禁用，直接给离线方案（不白耗 120 秒超时）
     try:
-        from backend.services.cn_profile import is_competition
-        if is_competition():
+        from backend.services.cn_profile import is_cn
+        if is_cn():
             return (
                 f"当前为比赛/离线模式，OpenStreetMap 在线下载已禁用。\n\n"
                 f"路网数据请使用以下方式之一：\n"
@@ -4064,7 +4105,7 @@ def reverse_geocode(lng: float, lat: float) -> str:
     try:
         gcj_lng, gcj_lat = wgs84_to_gcj02(lng, lat)
         params = {"key": _current_amap_key, "location": f"{gcj_lng},{gcj_lat}", "output": "JSON", "radius": 100}
-        resp = requests.get("https://restapi.amap.com/v3/geocode/regeo", params=params, timeout=10)
+        resp = data_request("GET", "https://restapi.amap.com/v3/geocode/regeo", params=params, timeout=10)
         data = resp.json()
         if data.get("status") != "1":
             return f"反向地理编码失败：{data.get('info', '未知错误')}"
@@ -4097,7 +4138,7 @@ def batch_geocode(addresses: str) -> str:
     for addr in parts:
         try:
             params = {"key": _current_amap_key, "address": addr, "output": "JSON"}
-            resp = requests.get("https://restapi.amap.com/v3/geocode/geo", params=params, timeout=10)
+            resp = data_request("GET", "https://restapi.amap.com/v3/geocode/geo", params=params, timeout=10)
             data = resp.json()
             if data.get("status") != "1" or not data.get("geocodes"):
                 results.append(f"  ❌ {addr}：未找到")
@@ -5526,9 +5567,7 @@ def view_3d_terrain(layer_name: str, exaggeration: float = 2.0) -> str:
 <style>body{{margin:0;overflow:hidden;background:#1a1a2e}}</style></head><body>
 {legend_html}
 <script src="{_vendor_file_uri('three', 'three.min.js')}"></script>
-<script>window.THREE || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\\/script>');</script>
 <script src="{_vendor_file_uri('three', 'OrbitControls.js')}"></script>
-<script>window.THREE && window.THREE.OrbitControls || document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\\/script>');</script>
 <script>
 var scene=new THREE.Scene();
 var cam=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.01,1000);
@@ -7174,6 +7213,8 @@ def fetch_weather_data(latitude: float, longitude: float,
     - past_days: 过去天数(默认 7，上限 90)；forecast_days: 预报天数(默认 0，上限 16)。
     - variables: 逗号分隔指标，默认温度/降水/风速；start_date/end_date: 自定义日期范围(YYYY-MM-DD)。
     - location_name: 地名标注，用于图表标题与统计展示。"""
+    if is_cn():
+        return "CN 模式已禁用此境外数据源，请使用国内已批准服务或上传本地数据。"
     try:
         import requests
         import datetime
@@ -7194,7 +7235,7 @@ def fetch_weather_data(latitude: float, longitude: float,
             params["past_days"] = min(max(past_days, 0), 90)
             params["forecast_days"] = min(max(forecast_days, 0), 16)
 
-        resp = requests.get("https://api.open-meteo.com/v1/forecast",
+        resp = data_request("GET", "https://api.open-meteo.com/v1/forecast",
                             params=params, timeout=20)
         resp.raise_for_status()
         data = resp.json()
@@ -7286,6 +7327,8 @@ def fetch_earthquake_data(start_time: str = "", end_time: str = "",
     """从 USGS 获取地震数据并生成点图层推送到地图（免费免Key）。
     - start_time / end_time: 时间范围(YYYY-MM-DD，默认近 30 天)；min_magnitude: 最小震级(默认 2.5)。
     - min_lat/max_lat/min_lon/max_lon: 空间范围；limit: 最大条数(默认 500)。输出分级着色图层与震级分布直方图。"""
+    if is_cn():
+        return "CN 模式已禁用此境外数据源，请使用国内已批准服务或上传本地数据。"
     try:
         import requests
         import datetime
@@ -7306,7 +7349,7 @@ def fetch_earthquake_data(start_time: str = "", end_time: str = "",
             "maxlongitude": max_lon,
             "limit": limit,
         }
-        resp = requests.get("https://earthquake.usgs.gov/fdsnws/event/1/query",
+        resp = data_request("GET", "https://earthquake.usgs.gov/fdsnws/event/1/query",
                             params=params, timeout=25)
         resp.raise_for_status()
         data = resp.json()
@@ -7424,7 +7467,7 @@ def _tile_to_quadkey(x, y, z):
 
 def _fetch_satellite_imagery(west, south, east, north, zoom=16, max_tiles=49, source="auto"):
     """下载卫星影像瓦片并拼接为 PIL Image。
-    source: auto（先 Esri 失败回退 Bing）/ esri / bing
+    source: auto（CN 仅高德；intl 高德/Bing/Esri）/ amap / esri / bing
     自动使用系统代理（urllib getproxies），兼容 HTTP_PROXY/HTTPS_PROXY 环境变量。
     返回 (image, metadata) 或抛出异常。"""
     import math
@@ -7484,8 +7527,16 @@ def _fetch_satellite_imagery(west, south, east, north, zoom=16, max_tiles=49, so
                     tile = _tile_cache[_tile_key]
                     _cache_hits["tile"] += 1
                 else:
-                    with _opener.open(req, timeout=20) as resp:
-                        tile = Image.open(_io.BytesIO(resp.read())).convert("RGB")
+                    if is_cn():
+                        resp = data_request("GET", url, timeout=20)
+                        try:
+                            resp.raise_for_status()
+                            tile = Image.open(_io.BytesIO(resp.content)).convert("RGB")
+                        finally:
+                            resp.close()
+                    else:
+                        with _opener.open(req, timeout=20) as resp:
+                            tile = Image.open(_io.BytesIO(resp.read())).convert("RGB")
                     _tile_cache[_tile_key] = tile
                     # 缓存上限：超过 500 张时清空一半（防止内存膨胀）
                     if len(_tile_cache) > 500:
@@ -7498,7 +7549,11 @@ def _fetch_satellite_imagery(west, south, east, north, zoom=16, max_tiles=49, so
     # 按 source 策略尝试下载（CN：国内源优先，全部为纯影像瓦片、无边界标注）
     errors = []
     sources_to_try = []
-    if source == "auto":
+    if is_cn():
+        if source not in ("auto", "amap"):
+            raise NetworkPolicyError("CN 模式仅允许高德影像，请使用国内影像或本地栅格。")
+        sources_to_try = ["amap"]
+    elif source == "auto":
         sources_to_try = ["amap", "bing", "esri"]
     else:
         sources_to_try = [source]
@@ -7713,7 +7768,7 @@ def inspect_satellite_image(
     inspection_type: str = "all",
     zoom: int = 14,
 ) -> str:
-    """卫星影像快速巡检（无需下载）。利用 Esri World Imagery 免费瓦片初筛水体/植被/裸地/建筑候选区并上图。
+    """卫星 RGB 影像快速巡检。CN 模式仅使用高德影像，初筛水体/植被/裸地/建筑候选区并上图，结果属于启发式判读。
     - place_name: 明确地名（如'武汉市洪山区'，禁止编造），优先裁剪已注册行政边界。
     - bbox: 手动范围 'west,south,east,north'（WGS84），与 place_name 二选一。
     - inspection_type: 巡检类别，'all'(默认) 或 'water,vegetation,bare_ground,built_up' 组合。
@@ -7943,7 +7998,7 @@ def inspect_satellite_image(
         f"## 卫星影像巡检结果（{label}）",
         "",
         "### 基本信息",
-        f"- 影像来源：{'Esri World Imagery' if meta.get('source') == 'esri' else 'Bing 中国区卫星影像'}（缩放级别 z={meta['zoom']}）",
+        f"- 影像来源：{ {'amap': '高德影像', 'esri': 'Esri World Imagery', 'bing': 'Bing 卫星影像'}.get(meta.get('source'), '未知来源') }（缩放级别 z={meta['zoom']}）",
         f"- 研究范围：[{west:.4f}, {south:.4f}, {east:.4f}, {north:.4f}]",
         f"- 影像尺寸：{meta['width']} x {meta['height']} 像素",
         f"- 分析像素数：{active_count}",
@@ -9089,6 +9144,8 @@ def search_global_entities(query: str, lang: str = "zh") -> str:
     """全球开放地理实体与维基百科知识图谱检索（免 Key、全球覆盖）。注意：依赖外部服务（Wikidata），在网络受限环境下不可达；且外部实体数据的行政区划/国家标签口径不符合中国官方标准，当前档位默认不启用。
     检索全球任意国家、山川河流、地标名胜、岛屿、行政区划，提取 Wikidata 经纬度坐标、实体定义与维基百科简介。
     用户查询全球地理实体或问"XX 在哪里/XX 的百科信息"时调用。"""
+    if is_cn():
+        return "CN 模式已禁用此境外数据源，请使用国内已批准服务或上传本地数据。"
     try:
         from backend.services.cn_profile import is_cn
         if is_cn():
@@ -9126,6 +9183,8 @@ def fetch_osm_boundary_or_features(query: str, feature_type: str = "boundary", b
     query: 地名（如 'Taiwan', 'Tokyo', 'Paris'）；feature_type: boundary（行政边界）/ roads（道路网）/ buildings（建筑物）/ water（水系）；
     bbox: 可选空间范围；limit: 要素上限；auto_render: 是否自动上图（默认 True）。
     用户需要拉取全球任意区域边界或 OSM 矢量时调用。"""
+    if is_cn():
+        return "CN 模式已禁用此境外数据源，请使用国内已批准服务或上传本地数据。"
     try:
         from backend.services.cn_profile import is_cn
         if is_cn():
@@ -11324,8 +11383,8 @@ try:
     _disabled = _cn_disabled_tools()
     if _disabled:
         tools = [t for t in tools if (getattr(t, "name", None) or getattr(t, "__name__", "")) not in _disabled]
-except Exception:
-    pass
+except ImportError:
+    raise RuntimeError("无法加载区域数据策略，拒绝注册 AI 工具")
 
 # ============================================================
 # 工具执行历史：在 tools 列表出口统一包装记录（工具本体零侵入）

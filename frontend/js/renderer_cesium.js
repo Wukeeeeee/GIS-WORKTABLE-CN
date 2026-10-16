@@ -117,6 +117,7 @@ window.GIS = window.GIS || {};
     viewer = new Cesium.Viewer(container3d, {
       baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
         url: AMAP_IMAGERY,
+        tilingScheme: GIS.coords.cesiumAmapTilingScheme(Cesium),
         subdomains: ['1', '2', '3', '4'],
         credit: '© 高德地图',
       })),
@@ -615,6 +616,7 @@ window.GIS = window.GIS || {};
     if (key === 'satellite' || key === 'street') {
       viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
         url: key === 'street' ? AMAP_VECTOR : AMAP_IMAGERY,
+        tilingScheme: GIS.coords.cesiumAmapTilingScheme(Cesium),
         subdomains: ['1', '2', '3', '4'],
         credit: '© 高德地图',
       }));

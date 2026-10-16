@@ -42,6 +42,10 @@ class CloudNativeError(Exception):
 def _as_vsi_path(source: str) -> str:
     """http(s) URL → GDAL /vsicurl/ 流式路径；本地路径原样返回"""
     s = str(source).strip()
+    from backend.services.cn_profile import is_cn
+    if is_cn() and s.startswith(("http://", "https://", "/vsicurl/http://", "/vsicurl/https://")):
+        # CN 先经受控 HTTP 下载，避免 GDAL 的原生网络层绕过重定向检查。
+        return http_download_to_temp(s.removeprefix("/vsicurl/"))
     if s.startswith(("http://", "https://")) and not s.startswith("/vsi"):
         return "/vsicurl/" + s
     return s
@@ -88,6 +92,27 @@ def http_download_to_temp(url: str, fmt: str = "") -> str:
     """urllib 下载远程文件到临时目录（上限 300MB），返回本地路径"""
     import tempfile
     from urllib.parse import urlparse
+    from backend.services.cn_profile import is_cn
+    from backend.services.network_policy import data_request
+    if is_cn():
+        ext = os.path.splitext(urlparse(url).path)[1] or ("." + fmt if fmt else ".bin")
+        path = None
+        try:
+            with data_request("GET", url, timeout=60, stream=True) as response:
+                response.raise_for_status()
+                fd, path = tempfile.mkstemp(suffix=ext, prefix="gis_cloud_")
+                total = 0
+                with os.fdopen(fd, "wb") as output:
+                    for chunk in response.iter_content(512 * 1024):
+                        total += len(chunk)
+                        if total > _DOWNLOAD_CAP_BYTES:
+                            raise CloudNativeError("远程文件超过 300MB 下载上限")
+                        output.write(chunk)
+            return path
+        except Exception as exc:
+            if path and os.path.exists(path):
+                os.remove(path)
+            raise CloudNativeError(f"下载失败: {exc}") from exc
     u = str(url).strip()
     ext = os.path.splitext(urlparse(u).path)[1].lower() or (f".{fmt}" if fmt else ".bin")
     req = urllib.request.Request(u, headers={"User-Agent": "Gis-WorkTable/1.0"})
@@ -301,6 +326,12 @@ class _HttpRangeSource:
         self.url = url.strip()
 
     def get_bytes(self, start: int, length: int) -> bytes:
+        from backend.services.cn_profile import is_cn
+        from backend.services.network_policy import data_request
+        if is_cn():
+            with data_request("GET", self.url, headers={"Range": f"bytes={start}-{start + length - 1}"}, timeout=30) as response:
+                response.raise_for_status()
+                return response.content
         req = urllib.request.Request(
             self.url,
             headers={

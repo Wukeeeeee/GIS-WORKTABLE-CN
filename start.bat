@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set "GISWTB_PROFILE=cn"
 title GIS-WORKTABLE Launcher
 chcp 65001 >nul
 cd /d "%~dp0"
@@ -27,4 +28,4 @@ if errorlevel 1 (
 )
 echo GIS-WORKTABLE: http://127.0.0.1:%PORT%
 start "" "http://127.0.0.1:%PORT%"
-echo To stop: Ctrl+C in the backend window, or run scripts\stop.bat.
+echo To stop: Ctrl+C in the backend window, or run stop.bat.

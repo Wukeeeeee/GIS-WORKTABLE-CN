@@ -26,7 +26,8 @@ def _get_headers() -> dict:
 def _http_get(url: str, params: dict = None, timeout: int = 10) -> requests.Response:
     proxies = get_effective_proxies()
     headers = _get_headers()
-    return requests.get(url, params=params, headers=headers, proxies=proxies, timeout=timeout)
+    from backend.services.network_policy import data_request
+    return data_request("GET", url, params=params, headers=headers, proxies=proxies, timeout=timeout)
 
 
 # ============================================================

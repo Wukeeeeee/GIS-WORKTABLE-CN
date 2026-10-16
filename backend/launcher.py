@@ -14,7 +14,8 @@ WORKSPACE = os.path.normcase(str(PROJECT_ROOT))
 
 
 def health_identity():
-    return {"status": "ok", "service": SERVICE, "workspace": WORKSPACE, "pid": os.getpid()}
+    from backend.services.cn_profile import get_profile
+    return {"status": "ok", "service": SERVICE, "workspace": WORKSPACE, "pid": os.getpid(), "profile": get_profile()}
 
 
 def probe(port):
@@ -23,7 +24,8 @@ def probe(port):
         with opener.open(f"http://127.0.0.1:{port}/api/health", timeout=1) as response:
             data = json.loads(response.read(8192))
         if (isinstance(data, dict) and data.get("status") == "ok"
-                and data.get("service") == SERVICE and data.get("workspace") == WORKSPACE):
+                and data.get("service") == SERVICE and data.get("workspace") == WORKSPACE
+                and data.get("profile") == health_identity()["profile"]):
             return data
     except (OSError, ValueError):
         pass

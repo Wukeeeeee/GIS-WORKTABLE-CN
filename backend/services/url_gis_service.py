@@ -38,7 +38,8 @@ def _http_get(url: str, params: dict = None, timeout: int = 15) -> requests.Resp
     proxies = get_effective_proxies()
     headers = _get_request_headers()
     try:
-        resp = requests.get(url, params=params, headers=headers, proxies=proxies, timeout=timeout)
+        from backend.services.network_policy import data_request
+        resp = data_request("GET", url, params=params, headers=headers, proxies=proxies, timeout=timeout)
         resp.raise_for_status()
         return resp
     except Exception as e:
@@ -549,7 +550,8 @@ def _inspect_zip_shapefile(url: str) -> dict:
     with open(zip_path, "wb") as f:
         f.write(resp.content)
     with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(out_dir)
+        from backend.services.file_safety import safe_extract_zip
+        safe_extract_zip(z, out_dir)
 
     shp_files = [os.path.join(out_dir, f) for f in os.listdir(out_dir) if f.lower().endswith(".shp")]
     if not shp_files:
@@ -674,7 +676,8 @@ def fetch_gis_data_url(
         with open(zip_path, "wb") as f:
             f.write(resp.content)
         with zipfile.ZipFile(zip_path, "r") as z:
-            z.extractall(out_temp)
+            from backend.services.file_safety import safe_extract_zip
+            safe_extract_zip(z, out_temp)
         shp_files = [os.path.join(out_temp, f) for f in os.listdir(out_temp) if f.lower().endswith(".shp")]
         gdf = gpd.read_file(shp_files[0])
         if limit and len(gdf) > limit:

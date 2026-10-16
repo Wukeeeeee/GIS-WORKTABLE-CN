@@ -267,6 +267,9 @@ def test_cloud_native_tools_registered():
 
 def _network_ok(url) -> bool:
     """探测：对目标发 Range GET（bytes=0-0）。HEAD 对部分 CDN 会挂起，不可靠。"""
+    from backend.services.cn_profile import is_cn
+    if is_cn():
+        return False  # 这些集成用例使用 GitHub 境外样例，仅在 intl 模式运行。
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Gis-WorkTable/1.0",
                                                    "Range": "bytes=0-0"})

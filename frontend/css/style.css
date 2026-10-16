@@ -2179,7 +2179,16 @@ img.ui-logo { background: transparent; object-fit: contain; mask-image: none; -w
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }
 }
-.step-log { font-size:11px; color:var(--ui-gray-600); font-family:var(--font-mono); border-left:2px solid var(--ui-gray-200); padding-left:8px; margin-top:4px; }
+.ai-progress { margin: 10px 0 4px; color: var(--on-surface-variant); font-size: 12px; }
+.ai-progress summary { cursor: pointer; padding: 6px 0; line-height: 1.5; }
+.ai-progress summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.ai-progress .step-log { max-height: 180px; overflow-y: auto; }
+.ai-elapsed { font-size: 11px; color: var(--on-surface-variant); font-variant-numeric: tabular-nums; }
+.ai-busy-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.ai-retry-button { font: inherit; font-size: 12px; cursor: pointer; padding: 5px 10px; border: 1px solid var(--outline-variant); border-radius: 6px; background: var(--surface); color: var(--on-surface); }
+.ai-retry-button:hover { background: var(--surface-container-high); }
+.ai-busy-notice .system-card { flex-direction: column; align-items: flex-start; }
+.step-log { font-size:11px; color:var(--ui-gray-600); font-family:inherit; border-left:2px solid var(--ui-gray-200); padding-left:8px; margin-top:4px; }
 .step-item { padding:1px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .step-running { color:var(--ui-gray-900); font-weight:500; }
 html.theme-dark .step-running { color:var(--on-surface); }

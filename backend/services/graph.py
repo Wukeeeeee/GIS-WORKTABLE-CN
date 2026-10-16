@@ -696,6 +696,7 @@ def _run_agent_stream_impl(
     llm = build_llm(cfg)
 
     # === Task Manager 与 SQLite 台账: 解析/创建任务与运行轮次 ===
+    _run_started_at = time.time()
     _run_id = uuid.uuid4().hex[:12]
     _tools_mod.set_current_run(_run_id)
     _task_id = task_manager.find_or_create_task(session_id or "default", original_message or "")
@@ -916,7 +917,7 @@ def _run_agent_stream_impl(
     _dur_ms = int((time.time() - _run_started_at) * 1000)
     _schema_chars = len(json.dumps([convert_to_openai_tool(t) for t in tools], ensure_ascii=False))
     _token_usage = extract_and_record_token_usage(
-        messages=final_messages,
+        messages=msgs,
         model_name=cfg.model,
         task_id=_task_id,
         tool_count=len(tools),

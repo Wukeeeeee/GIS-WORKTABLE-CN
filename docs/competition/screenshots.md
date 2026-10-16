@@ -20,3 +20,13 @@
 `npx -y @mermaid-js/mermaid-cli -i input.mmd -o architecture.png`（把 §5 两个 ``` 之间的内容存为 input.mmd）。
 
 **待人工完成**：以上 10 张截图均需按步骤实际操作后截取，本文件只负责"拍什么、怎么拍"。
+
+## 已采集的本地运行截图（2026-10-16）
+
+以下截图由本机 `cn` 档实际运行生成，分辨率 1920×1080。演示输入是上海坐标附近的 3 个合成点位，不代表真实调查数据；S2 展示真实上传与 500 米缓冲执行结果。AI 工具调用截图尚未采集，不能用静态界面代替真实模型调用。
+
+| 截图 | 文件 | 说明 |
+| --- | --- | --- |
+| S1 工作台首页 | [S1-worktable-home.png](images/S1-worktable-home.png) | 隐藏本机最近工程侧栏后的首页 |
+| S2 手动缓冲结果 | [S2-manual-buffer-result.png](images/S2-manual-buffer-result.png) | 上传合成 GeoJSON 后执行 500 米缓冲，结果图层显示在地图上 |
+| S6 3D 图层视图 | [S6-3d-layer-view.png](images/S6-3d-layer-view.png) | 同一批点位及缓冲结果切换到本地 Cesium 3D 视图 |

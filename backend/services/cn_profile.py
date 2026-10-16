@@ -7,7 +7,7 @@
 - Overpass 等外部服务失败时给出离线/替代方案提示
 
 可用取值：
-- "cn"          CN 默认：内置数据源优先，外部边界/实体工具禁用，路网等纯数据工具保留（失败有降级）
+- "cn"          CN 默认：内置数据源优先，外部边界/实体工具禁用，境外在线数据工具禁用，通用抓取走国内白名单
 - "competition" 比赛/展示：在 cn 基础上进一步禁用所有外部在线数据工具（含路网下载），离线包优先
 - "intl"        开放模式（启用全部数据源）
 
@@ -26,6 +26,9 @@ _COMPETITION_DISABLED_TOOLS = {
 _CN_DISABLED_TOOLS = {
     "search_global_entities",        # Wikidata/Wikipedia（国家标签口径风险）
     "fetch_osm_boundary_or_features",  # OSM 行政边界/矢量（边界画法风险）
+    "download_road_network",          # OSM 在线路网
+    "fetch_weather_data",             # Open-Meteo，尚无已配置国内替代源
+    "fetch_earthquake_data",           # USGS，尚无已配置国内替代源
 }
 
 

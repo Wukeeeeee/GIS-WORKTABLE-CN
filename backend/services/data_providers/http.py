@@ -50,13 +50,16 @@ def request_once(
       - 其它连接错误-> ProviderUnavailableError
     """
     import requests
+    from backend.services.network_policy import check_data_url, data_request
+
+    check_data_url(url)
 
     hdrs = {"User-Agent": _USER_AGENT}
     if headers:
         hdrs.update(headers)
 
     try:
-        resp = requests.request(
+        resp = data_request(
             method, url,
             params=params, data=data, json=json_body, headers=hdrs,
             timeout=timeout, stream=stream,

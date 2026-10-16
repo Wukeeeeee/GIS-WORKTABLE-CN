@@ -1,4 +1,10 @@
 fastapi>=0.139.0
+# 演示环境已验证的直接依赖（此前仅因本机或传递依赖存在，换机可能缺失）
+python-multipart==0.0.32
+cryptography==48.0.0
+beautifulsoup4==4.13.5
+httpx==0.28.1
+pyarrow==24.0.0
 uvicorn==0.30.0
 # openai：无直接 import，是 langchain-openai 的传递依赖；pin 上限防止其破坏 langchain 兼容（勿删）
 openai>=2.16.0,<2.45.0

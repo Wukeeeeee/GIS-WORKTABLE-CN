@@ -12,10 +12,11 @@ os.environ.pop("PROJ_DATA", None)
 # 关闭 langchain-openai 的底层 TCP Keepalive 注入，恢复标准 httpx 代理自动检测，避免终端弹出代理警告
 os.environ.setdefault("LANGCHAIN_OPENAI_TCP_KEEPALIVE", "0")
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Response, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Response, Query, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
@@ -29,6 +30,7 @@ from backend.services.tools import _register_layer, _unregister_layer
 from backend.services.layer_service import inspect_geojson
 from backend.services import project_service
 from backend.launcher import health_identity
+from backend.services.file_safety import contained_path, safe_filename, safe_extract_zip
 
 
 # ===== 版本信息（服务器启动时自动生成） =====
@@ -76,17 +78,33 @@ print("")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=10000)  # 10KB 以上自动 gzip 压缩
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
+
+
+@app.middleware("http")
+async def local_origin_guard(request: Request, call_next):
+    # 同源浏览器工作台与无 Origin 的本地客户端均可使用，外部网页不可驱动本机 API。
+    origin = request.headers.get("origin")
+    expected = f"{request.url.scheme}://{request.headers.get('host', '')}"
+    if origin and origin.rstrip('/') != expected:
+        return Response("仅允许本机工作台同源访问", status_code=403)
+    if request.headers.get("sec-fetch-site") == "cross-site":
+        return Response("拒绝跨站访问本地工作台", status_code=403)
+    return await call_next(request)
 
 # 动态支持 /output 产物文件访问（支持时间戳前缀自动解析与子目录查找，防止 404）
 @app.get("/output/{filename:path}")
 async def serve_output_file(filename: str):
     import glob
-    direct_path = os.path.join(_TEMP_OUTPUT_DIR, filename)
+    try:
+        direct_path = contained_path(_TEMP_OUTPUT_DIR, filename)
+    except (ValueError, OSError):
+        raise HTTPException(status_code=400, detail="非法文件路径")
     if os.path.isfile(direct_path):
         return FileResponse(direct_path)
     
@@ -97,6 +115,15 @@ async def serve_output_file(filename: str):
             for f in files:
                 if f == base_name or f.endswith(f"_{base_name}"):
                     matches.append(os.path.join(root, f))
+    if matches:
+        safe_matches = []
+        for match in matches:
+            try:
+                contained_path(_TEMP_OUTPUT_DIR, os.path.relpath(match, _TEMP_OUTPUT_DIR))
+                safe_matches.append(match)
+            except (ValueError, OSError):
+                continue
+        matches = safe_matches
     if matches:
         matches.sort(key=os.path.getmtime, reverse=True)
         return FileResponse(matches[0])
@@ -705,9 +732,16 @@ async def get_boundary_api(place: str = "长沙市", adcode: str = ""):
 async def upload(file: UploadFile = File(...)):
     import os, tempfile, zipfile, orjson
     loop = asyncio.get_event_loop()
-    content = await file.read()
-    filename = file.filename or ''
+    content = await file.read(100 * 1024 * 1024 + 1)
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="演示版单文件上传上限为 100MB")
+    try:
+        filename = safe_filename(file.filename or '')
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     ext = os.path.splitext(filename)[1].lower()
+    if ext not in {'.geojson', '.json', '.zip', '.gpkg', '.kml', '.kmz', '.gpx', '.dxf', '.tif', '.tiff', '.csv', '.pmtiles', '.parquet', '.geoparquet', '.fgb'}:
+        raise HTTPException(status_code=400, detail="不支持的 GIS 文件格式")
 
     # GeoJSON 已有内存副本，跳过磁盘写；其余格式落地供 AI 后续处理
     saved_path = None
@@ -741,7 +775,10 @@ async def upload(file: UploadFile = File(...)):
             if not shp_files:
                 return {"error": "ZIP 包中没有找到 .shp 文件"}
             with tempfile.TemporaryDirectory() as tmpdir:
-                zf.extractall(tmpdir)
+                try:
+                    safe_extract_zip(zf, tmpdir)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc))
                 shp_path = os.path.join(tmpdir, shp_files[0])
                 if not os.path.exists(shp_path):
                     return {"error": "无法读取 Shapefile"}
@@ -995,7 +1032,9 @@ async def export_project(project_id: str):
 
 @app.post("/api/projects/import")
 async def import_project(file: UploadFile = File(...)):
-    content = await file.read()
+    content = await file.read(100 * 1024 * 1024 + 1)
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="演示版工程导入上限为 100MB")
     try:
         result = await asyncio.to_thread(project_service.import_project, content)
         return result
@@ -1319,6 +1358,11 @@ async def api_geosource_proxy(url: str = Query(..., description="远程目标 UR
     url_str = (url or "").strip()
     if not url_str.startswith(('http://', 'https://')):
         raise HTTPException(status_code=400, detail="非法 URL 地址")
+    from backend.services.network_policy import check_data_url, data_request, NetworkPolicyError
+    try:
+        check_data_url(url_str)
+    except NetworkPolicyError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
 
     loop = asyncio.get_event_loop()
 
@@ -1335,10 +1379,22 @@ async def api_geosource_proxy(url: str = Query(..., description="远程目标 UR
             }
         )
         try:
-            with opener.open(req, timeout=12) as resp:
-                content = resp.read()
+            with data_request("GET", url_str, headers=dict(req.header_items()), proxies=proxy_dict, timeout=12, stream=True) as resp:
+                resp.raise_for_status()
+                chunks = []
+                size = 0
+                for chunk in resp.iter_content(64 * 1024):
+                    size += len(chunk)
+                    if size > 10 * 1024 * 1024:
+                        raise HTTPException(status_code=413, detail="代理响应超过 10MB，请使用数据下载工具")
+                    chunks.append(chunk)
+                content = b''.join(chunks)
                 raw_type = resp.headers.get("Content-Type", "application/json")
                 return content, raw_type.split(";")[0]
+        except HTTPException:
+            raise
+        except NetworkPolicyError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
         except urllib.error.HTTPError as e:
             raise HTTPException(status_code=e.code, detail=f"远程服务错误: {e.reason}")
         except Exception as e:
@@ -1383,8 +1439,9 @@ def _reverse_geocode_sync(lng: float, lat: float) -> dict:
         try:
             from backend.services.geo_coords import wgs84_to_gcj02
             gcj_lng, gcj_lat = wgs84_to_gcj02(lng, lat)
-            resp = requests.get(
-                "https://restapi.amap.com/v3/geocode/regeo",
+            from backend.services.network_policy import data_request
+            resp = data_request(
+                "GET", "https://restapi.amap.com/v3/geocode/regeo",
                 params={"key": _current_amap_key, "location": f"{gcj_lng},{gcj_lat}", "output": "JSON", "radius": 200, "extensions": "all"},
                 timeout=4,
             )
@@ -1407,6 +1464,9 @@ def _reverse_geocode_sync(lng: float, lat: float) -> dict:
             pass
 
     # 2. 免费回退：OSM Nominatim（全球通用）
+    from backend.services.cn_profile import is_cn
+    if is_cn():
+        return result
     try:
         proxies = get_effective_proxies()
         headers = {"User-Agent": "GIS-WorkTable/2.0 ReverseGeocoder"}
@@ -1716,7 +1776,7 @@ class _NoCacheStaticFiles(StaticFiles):
 _cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache")
 os.makedirs(_cache_dir, exist_ok=True)
 os.makedirs(os.path.join(_cache_dir, "charts"), exist_ok=True)
-app.mount("/cache", StaticFiles(directory=_cache_dir), name="cache")
+app.mount("/cache/charts", StaticFiles(directory=os.path.join(_cache_dir, "charts")), name="cache-charts")
 
 _frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 app.mount("/", _NoCacheStaticFiles(directory=_frontend_dir, html=True), name="frontend")

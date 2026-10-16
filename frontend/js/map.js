@@ -3,8 +3,7 @@
  * Leaflet 封装。底图白名单（合规硬约束）：高德影像/矢量（免 Key）、天地图（需 tk，官方口径）。
  * 纯影像底图不含国界线；天地图注记边界为中国官方口径。Esri/Bing/OSM 底图不在 CN 默认选项中。
  *
- * 坐标：数据统一 WGS-84。注意高德底图为 GCJ-02，矢量叠加存在数百米级偏移（现状既有问题，
- * 与必应中国底图同级）；配置天地图 tk（CGCS2000）后可消除偏移，建议优先使用。
+ * 坐标：数据统一 WGS-84；高德底图在显示投影中转换 GCJ-02，交互及导出仍使用 WGS-84。
  */
 
 window.GIS = window.GIS || {};
@@ -23,8 +22,8 @@ window.GIS = window.GIS || {};
   const layers = {};
   const geoStore = {};
   let baseLayer = null;
-  let _currentBaseMap = 'bing';
-  let _satelliteSource = 'bing'; // 'esri' | 'bing' // 'satellite' | 'light'
+  let _currentBaseMap = 'amap';
+  let _satelliteSource = 'amap';
 let drawnItems = null;        // Leaflet.Draw 绘制的图形集合
 let _featureMap = {};         // { "layerName:idx": LeafletLayer } — 要素索引→Leaflet 图层
 let _highlightedFeature = null; // 当前高亮的 Leaflet 图层
@@ -173,7 +172,7 @@ var _undoSkip = false;
     // 卫星底图（CN：高德影像/高德矢量/天地图 · intl：Esri / Bing / 白底）
     _currentBaseMap = localStorage.getItem('gis_basemap') || 'amap';
     // 兼容旧版本存储值，统一迁移到 CN 白名单默认
-    if (['satellite', 'esri', 'bing'].indexOf(_currentBaseMap) !== -1) { _currentBaseMap = 'amap'; }
+    if (['amap', 'amap_vec', 'tdt', 'light'].indexOf(_currentBaseMap) === -1) { _currentBaseMap = 'amap'; }
     if (_currentBaseMap !== 'light') {
       var _cred0 = null;
       try { _cred0 = JSON.parse(localStorage.getItem('gis_geo_credentials') || '{}'); } catch (e) {}
@@ -182,6 +181,7 @@ var _undoSkip = false;
     }
     _satelliteSource = localStorage.getItem('gis_sat_source') || 'amap';
     if (['amap', 'amap_vec', 'tdt'].indexOf(_satelliteSource) === -1) { _satelliteSource = 'amap'; }
+    _setDisplayCrs(_currentBaseMap);
     baseLayer = _createBaseLayer(_currentBaseMap);
     baseLayer.addTo(mapInstance);
     // 初始化底图开关勾选状态（白底=关闭，其余=开启）
@@ -453,6 +453,7 @@ var _undoSkip = false;
 
   /** 创建底图图层 */
   function _createBaseLayer(type) {
+    if (['amap', 'amap_vec', 'tdt', 'light'].indexOf(type) === -1) type = 'amap';
     if (type === 'light') {
       return new L.TileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==', {
         attribution: '',
@@ -488,7 +489,7 @@ var _undoSkip = false;
         // 无 tk 时回落高德影像并提示
         console.warn('[CN] 天地图 tk 未配置，已回落高德影像底图。请在「凭据管理」配置天地图 tk。');
         if (typeof showGlobalToast === 'function') {
-          showGlobalToast('天地图 tk 未配置，已使用高德底图（建议在凭据管理配置天地图 tk 以消除坐标偏移）');
+          showGlobalToast('天地图 tk 未配置，已使用高德底图');
         }
         return _createBaseLayer('amap');
       }
@@ -528,10 +529,24 @@ var _undoSkip = false;
     });
   }
 
+  // 统一改变显示投影，让点、面、绘制、点击位置及图片叠加使用同一坐标约定。
+  var _amapDisplayCrs = null;
+  function _setDisplayCrs(type) {
+    var useGcj = type === 'amap' || type === 'amap_vec' || (type === 'tdt' && !_getTdtTk());
+    if (useGcj && !_amapDisplayCrs) _amapDisplayCrs = GIS.coords.leafletAmapCrs(L);
+    var crs = useGcj ? _amapDisplayCrs : L.CRS.EPSG3857;
+    if (mapInstance.options.crs === crs) return;
+    var center = mapInstance.getCenter(), zoom = mapInstance.getZoom();
+    mapInstance.options.crs = crs;
+    mapInstance.setView(center, zoom, { reset: true, animate: false });
+  }
+
   /** 切换底图 */
   function switchBaseMap(type) {
+    if (['amap', 'amap_vec', 'tdt', 'light'].indexOf(type) === -1) type = 'amap';
     if (!mapInstance || type === _currentBaseMap) return;
     if (baseLayer) mapInstance.removeLayer(baseLayer);
+    _setDisplayCrs(type);
     baseLayer = _createBaseLayer(type);
     baseLayer.addTo(mapInstance);
     _currentBaseMap = type;

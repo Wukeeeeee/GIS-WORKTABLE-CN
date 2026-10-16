@@ -1,4 +1,5 @@
 import os, json, hashlib, gzip, shutil, uuid, datetime, time, zipfile, io, re
+from backend.services.file_safety import safe_filename, contained_path, safe_extract_zip
 
 def extract_clean_title(content: str, max_len: int = 30) -> str:
     """从可能包含引用回复、图层注入等系统前缀的用户消息中，提取真实提问作为工程名/摘要"""
@@ -54,13 +55,13 @@ def _ensure_dirs():
     os.makedirs(_BLOB_DIR, exist_ok=True)
 
 def _project_dir(pid: str) -> str:
-    return os.path.join(_PROJECT_DIR, f"proj_{pid}")
+    return contained_path(_PROJECT_DIR, f"proj_{safe_filename(pid)}")
 
 def _project_path(pid: str) -> str:
     return os.path.join(_project_dir(pid), "project.json")
 
 def _blob_path(sha: str) -> str:
-    return os.path.join(_BLOB_DIR, f"{sha}.geojson.gz")
+    return contained_path(_BLOB_DIR, f"{safe_filename(sha)}.geojson.gz")
 
 # ============================================================
 # CAS Blob 存储
@@ -353,7 +354,7 @@ def import_project(zip_bytes: bytes) -> dict:
     os.makedirs(target_dir, exist_ok=True)
 
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        zf.extractall(target_dir)
+        safe_extract_zip(zf, target_dir)
 
     proj_path = os.path.join(target_dir, "project.json")
     if not os.path.exists(proj_path):

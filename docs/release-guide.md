@@ -46,3 +46,27 @@
 ```
 
 不将“准备发布”“测试曾通过”写成“已经发布”“此版本全部通过”。
+
+## 第三方依赖与许可证索引
+
+以下为上游项目的公开声明，最终以各项目仓库 `LICENSE` 为准（索引原先位于 README，为精简 README 迁移至此）。
+
+| 依赖 | 许可证 | 用途 |
+| --- | --- | --- |
+| FastAPI | MIT | Web API 框架 |
+| uvicorn | BSD-3-Clause | ASGI 服务器 |
+| LangGraph / LangChain / langchain-core / langchain-openai | MIT | Agent 编排 |
+| MCP | MIT | 对外暴露 GIS 工具给外部 AI 客户端 |
+| Shapely / GeoPandas | BSD-3-Clause | 几何与矢量数据处理 |
+| NumPy / pandas / SciPy / scikit-learn / scikit-image | BSD-3-Clause | 数值与统计计算 |
+| Rasterio | BSD-3-Clause | 栅格读写 |
+| PyProj / pyogrio | MIT | 坐标变换与矢量 IO |
+| NetworkX | BSD-3-Clause | 网络分析 |
+| Requests | Apache-2.0 | HTTP 客户端 |
+| Playwright | Apache-2.0 | 端到端测试 |
+| Pillow | HPND | 图像处理 |
+| Matplotlib | Matplotlib (PSF-based) | 制图 |
+| pmtiles / mapbox-vector-tile | BSD-3-Clause | 云原生格式流式加载 |
+| pyecharts / markdownify / adjustText | MIT | 图表与文本转换 |
+| orjson | Apache-2.0 / MIT 双许可 | 高性能 JSON |
+| scrapling | 以仓库声明为准 | 网页抓取 |

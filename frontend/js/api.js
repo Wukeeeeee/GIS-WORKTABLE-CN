@@ -130,12 +130,6 @@ window.GIS.api = (() => {
       { id: 'glm-routed', name: 'GLM-4.7-Flash+',
         base_url: 'https://open.bigmodel.cn/api/paas/v4/', model: 'glm-4.7-flash', api_key: '',
         glm_prompt: true, router: true, reasoning: false, temperature: 0.7, max_tokens: null },
-      { id: 'agnes', name: 'Agnes 2.0 Flash+',
-        base_url: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.0-flash', api_key: '',
-        glm_prompt: false, router: true, reasoning: false, temperature: 0.7, max_tokens: null },
-      { id: 'openrouter', name: 'OpenRouter GLM-5.2 (free)',
-        base_url: 'https://openrouter.ai/api/v1', model: 'z-ai/glm-5.2:free', api_key: '',
-        glm_prompt: true, router: false, reasoning: false, temperature: 0.7, max_tokens: null },
       { id: 'custom', name: '自定义（OpenAI 兼容）',
         base_url: '', model: '', api_key: '',
         glm_prompt: false, router: false, reasoning: false, temperature: null, max_tokens: null },
@@ -197,7 +191,8 @@ window.GIS.api = (() => {
           if (p.router === undefined) p.router = false;
           if (p.reasoning === undefined) p.reasoning = false;
         });
-        return arr;
+        var cnProviders = arr.filter(function(p) { return p.id !== 'agnes' && p.id !== 'openrouter'; });
+        return cnProviders.length ? cnProviders : _seedProviders();
       }
     } catch (e) { /* 损坏则重建 */ }
     var seed = _seedProviders();

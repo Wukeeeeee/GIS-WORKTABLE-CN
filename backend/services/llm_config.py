@@ -246,6 +246,8 @@ def build_llm(cfg: LLMConfig) -> ChatOpenAI:
       也会吐思考，仍能展示 & 跨轮回传）
     """
     import httpx
+    from backend.services.network_policy import check_model_url
+    check_model_url(cfg.base_url)
     from backend.services.model_transport import effective_model_proxy
     proxy = effective_model_proxy(cfg.base_url)
     kwargs = {
@@ -253,8 +255,8 @@ def build_llm(cfg: LLMConfig) -> ChatOpenAI:
         "api_key": cfg.api_key,
         "base_url": cfg.base_url,
         "stream_usage": True,
-        "http_client": httpx.Client(proxy=proxy, trust_env=False),
-        "http_async_client": httpx.AsyncClient(proxy=proxy, trust_env=False),
+        "http_client": httpx.Client(proxy=proxy, trust_env=False, follow_redirects=False),
+        "http_async_client": httpx.AsyncClient(proxy=proxy, trust_env=False, follow_redirects=False),
     }
     # 思考模型通常不允许 temperature；仅在用户显式给时传
     if cfg.temperature is not None:

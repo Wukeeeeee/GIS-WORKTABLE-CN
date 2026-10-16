@@ -76,7 +76,7 @@ async function waitForBackend(timeoutMs = 90000) {
         if (resp.ok) {
           const data = await resp.json();
           const normalize = (p) => process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
-          if (data.status === 'ok' && data.service === 'gis-worktable'
+          if (data.status === 'ok' && data.service === 'gis-worktable' && data.profile === 'cn'
               && typeof data.workspace === 'string'
               && normalize(data.workspace) === normalize(fs.realpathSync(PROJECT_ROOT))) return true;
         }
@@ -102,7 +102,7 @@ function startBackend(python) {
   console.log(`[GIS-Desktop] 启动后端: ${python} ${args.join(' ')} (cwd=${PROJECT_ROOT})`);
   backendProc = spawn(python, args, {
     cwd: PROJECT_ROOT,
-    env: { ...process.env },
+    env: { ...process.env, GISWTB_PROFILE: 'cn' },
     stdio: ['ignore', logFd, logFd],
     windowsHide: true,
   });
@@ -137,6 +137,7 @@ async function ensureBackend() {
   try {
     PORT = Number(execFileSync(python, ['-m', 'backend.launcher', 'select'], {
       cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 20000, windowsHide: true,
+      env: { ...process.env, GISWTB_PROFILE: 'cn' },
     }).trim());
     if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('Invalid backend port');
     BACKEND_URL = `http://127.0.0.1:${PORT}`;
