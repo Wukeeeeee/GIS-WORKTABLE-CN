@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 os.environ['GISWTB_PROFILE'] = 'cn'
 from backend.services.network_policy import check_data_url
 
-EXCLUDED = {'.git', '.serena', '.workbuddy', '.venv', 'node_modules', '__pycache__', 'cache', 'logs', 'output', 'uploads'}
+EXCLUDED = {'.git', '.serena', '.workbuddy', '.venv', '.bootstrap', 'node_modules', '__pycache__', 'cache', 'logs', 'output', 'uploads'}
 SECRET = re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{24,}|\b(?:ghp|github_pat)_[A-Za-z0-9_]{30,}|\bAKIA[A-Z0-9]{16}\b')
 
 

@@ -3,6 +3,7 @@ apikey.txt
 
 # Python
 .venv/
+.bootstrap/
 __pycache__/
 *.pyc
 *.pyo
@@ -46,6 +47,7 @@ cache/
 # AI 生成文件
 output/
 *.geojson
+!data/sample_delivery_test.geojson
 
 # 测试输出临时文件
 uploads/

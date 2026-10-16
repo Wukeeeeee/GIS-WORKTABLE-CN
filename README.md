@@ -53,11 +53,19 @@ GIS WorkTable-CN 把「导入数据 → 空间分析 → 地图核验 → 成果
 
 ### 1. 环境要求
 
-- Python 3.11 或更高版本
+- Windows 64 位；自动启动支持 Python 3.11–3.13，未安装时自动下载本地 Python 3.13
 - 现代浏览器（Chrome / Edge）
 - Node.js 仅桌面版需要，Web 版不需要
 
-### 2. 安装依赖
+### 2. 自动准备环境（推荐）
+
+直接双击 `start.bat`：检测项目 `.venv` → 缺少 Python 时下载 → 创建虚拟环境 → 安装缺少的依赖 → 启动服务并打开浏览器。环境已就绪时直接启动，不重复下载。
+
+首次运行需要联网、项目目录可写，下载可能需要数分钟。Python 与安装缓存位于 `.bootstrap/`，依赖位于 `.venv/`，不修改系统 Python 或系统 PATH。安装器 uv 与 Python 从官方 GitHub 分发源下载；依赖默认源失败后自动尝试清华镜像。网络全部不可用时会停止并显示错误，不会假装启动成功；恢复网络后再次双击即可重试。
+
+`GIS_PYTHON` 可指定创建虚拟环境所用的 64 位 Python 3.11–3.13；已有可用的项目 `.venv` 优先复用。复制来的失效虚拟环境会备份到 `.bootstrap/` 后重建。不要把另一台电脑的 `.venv` 当作可移植安装包。
+
+也可以手动安装：
 
 ```bat
 python -m venv .venv
@@ -70,7 +78,7 @@ python -m pip install -r backend\requirements.txt
 ### 3. 启动与停止
 
 ```bat
-start.bat     :: 选择端口 → 启动后端 → 打开浏览器（已固定 CN 档）
+start.bat     :: 检查/安装环境 → 选择端口 → 启动后端 → 打开浏览器（CN 档）
 stop.bat      :: 停止本项目的后端服务
 ```
 
@@ -134,6 +142,7 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010
 | [分层测试指南](docs/layered-testing-guide.md) | 测试分层与完整命令 |
 | [工具验证记录](docs/tool-validation.md) | 已验证 / 未验证范围 |
 | [CN 演示版提交说明](docs/cn-demo-submission.md) | 启动、演示流程与打包 |
+| [交付复现与换机指南](docs/DELIVERY_REPLICATION_GUIDE.md) · [独立环境验收记录](docs/portability-check-2026-10-16.md) | 换机复现步骤、预期判定与独立环境检查 |
 | [CN 数据请求排查](docs/cn-network-audit.md) | 数据访问加固与边界 |
 | [项目介绍（作品材料）](docs/competition/project-introduction.md) | 背景、场景、创新点与规划 |
 | [演示脚本](docs/competition/demo-script.md) · [截图清单](docs/competition/screenshots.md) | 演示与截图采集 |
