@@ -282,6 +282,37 @@ def run_agent(
     original_message: str = "",
     session_id: str = "default",
 ) -> dict:
+    """会话串行入口：同 session 已有请求时直接返回 busy 结果。
+    实际执行在 _run_agent_impl，成功或异常都会释放会话锁。"""
+    if not _tools_mod.acquire_session_lock(session_id or "default"):
+        return {
+            "response": "当前会话已有请求在处理中，请等待上一条完成后再发送新消息。",
+            "reasoning": None, "layers": [], "images": [], "heatmap": None,
+            "clear_layers": False, "layer_ops": [], "pending_suggestions": None,
+            "confirm_pending": None,
+            "busy": True,
+        }
+    try:
+        return _run_agent_impl(
+            messages=messages,
+            cfg=cfg,
+            amap_key=amap_key,
+            skill_text=skill_text,
+            original_message=original_message,
+            session_id=session_id,
+        )
+    finally:
+        _tools_mod.release_session_lock(session_id or "default")
+
+
+def _run_agent_impl(
+    messages: list,
+    cfg: LLMConfig,
+    amap_key: str = "",
+    skill_text: str = "",
+    original_message: str = "",
+    session_id: str = "default",
+) -> dict:
     """运行 LangGraph Agent + 自校验
 
     用 create_react_agent 替换原来的 while/if 手写循环。
@@ -590,6 +621,42 @@ def run_agent(
 # _cached_graph 在模块顶部已初始化
 
 def run_agent_stream(
+    messages: list,
+    cfg: LLMConfig,
+    amap_key: str = "",
+    skill_text: str = "",
+    original_message: str = "",
+    session_id: str = "default",
+    mode: str = "full",
+):
+    """会话串行入口：同 session 已有请求时 yield 一条 busy done 事件后结束。
+    实际执行在 _run_agent_stream_impl，生成器完成/关闭/异常都会释放会话锁。"""
+    if not _tools_mod.acquire_session_lock(session_id or "default"):
+        _busy_evt = json.dumps({
+            "type": "done",
+            "response": "当前会话已有请求在处理中，请等待上一条完成后再发送新消息。",
+            "reasoning": None, "layers": [], "images": [], "heatmap": None,
+            "clear_layers": False, "layer_ops": [], "pending_suggestions": None,
+            "confirm_pending": None,
+            "busy": True,
+        }, ensure_ascii=False)
+        yield f"data: {_busy_evt}\n\n"
+        return
+    try:
+        yield from _run_agent_stream_impl(
+            messages=messages,
+            cfg=cfg,
+            amap_key=amap_key,
+            skill_text=skill_text,
+            original_message=original_message,
+            session_id=session_id,
+            mode=mode,
+        )
+    finally:
+        _tools_mod.release_session_lock(session_id or "default")
+
+
+def _run_agent_stream_impl(
     messages: list,
     cfg: LLMConfig,
     amap_key: str = "",

@@ -9091,6 +9091,10 @@ def peek_pending_images():
                 for im in list(_pending_images) if isinstance(im, dict)]
 
 
+_session_locks: dict = {}
+_session_locks_guard = _threading_mod.Lock()
+
+
 def session_lock_wait_seconds() -> float:
     """同 session 新请求在被占用时最多等待多少秒。
 

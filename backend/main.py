@@ -246,6 +246,10 @@ async def chat(request: ChatRequest):
     except Exception:
         output["confirm_pending"] = None
 
+    # 会话忙：透传给前端，避免把提示语当成 AI 回答
+    if result.get("busy"):
+        output["busy"] = True
+
     return output
 
 def _synthetic_done_stream(result: dict):
@@ -374,7 +378,7 @@ async def chat_stream(request: ChatRequest):
                         _evt = json.loads(line[6:])
                     except Exception:
                         _evt = None
-                    if _evt and _evt.get("type") == "done":
+                    if _evt and _evt.get("type") == "done" and not _evt.get("busy"):
                         commit_assistant_reply(
                             session_id,
                             _evt.get("response", ""),
