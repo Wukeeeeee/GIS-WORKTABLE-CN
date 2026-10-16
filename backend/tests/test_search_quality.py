@@ -116,15 +116,27 @@ def test_all_engines_fail_is_explicit(monkeypatch):
 
 
 def test_search_chain_has_no_foreign_engine_domains():
+    """搜索链路本身不得含境外引擎域名。
+
+    只扫描搜索相关函数（引擎适配 + 评分/垃圾页判定 + search_web）：
+    文件其它位置（例如卫星瓦片的 Referer）与"搜索是否出境"无关，
+    不应为了让本断言通过而改写生产行为。
+    """
+    import re as _re
+
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    src = io.open(os.path.join(root, "backend", "services", "tools.py"), encoding="utf-8").read().lower()
-    forbidden = [
-        "duck" + "duckgo",
-        "html.duck" + "duckgo.com",
-        "www." + "bing.com",
-    ]
-    for token in forbidden:
-        assert token not in src, "搜索链路仍含境外引擎域名: " + token
-    assert "cn.bing.com" in src
+    full = io.open(os.path.join(root, "backend", "services", "tools.py"), encoding="utf-8").read()
+    want = {"_baidu_html_search", "_sogou_html_search", "_cn_bing_search",
+            "_query_tokens", "_relevance_score", "_looks_like_junk", "search_web"}
+    parts = []
+    for block in _re.split(r"(?m)^(?=def )", full):
+        m = _re.match(r"def (\w+)\(", block)
+        if m and m.group(1) in want:
+            parts.append(block)
+    chain = "".join(parts).lower()
+    assert chain, "未定位到搜索链路源码，断言失效"
+    for token in ("duck" + "duckgo", "html.duck" + "duckgo.com", "www." + "bing.com"):
+        assert token not in chain, "搜索链路仍含境外引擎域名: " + token
+    assert "cn.bing.com" in chain, "搜索链路应保留 cn.bing.com"
     for name in ("_baidu_html_search", "_sogou_html_search", "_cn_bing_search"):
-        assert ("def " + name) in src, "缺少国内搜索引擎函数: " + name
+        assert ("def " + name) in full, "缺少国内搜索引擎函数: " + name

@@ -7477,7 +7477,7 @@ def _fetch_satellite_imagery(west, south, east, north, zoom=16, max_tiles=49, so
                     _sub += 1
                 req = urllib.request.Request(url, headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GIS-WORKTABLE/1.0",
-                    "Referer": "https://cn.bing.com/maps/" if tile_source == "bing" else "",
+                    "Referer": "https://www.bing.com/maps/" if tile_source == "bing" else "",
                 })
                 _tile_key = (tile_source, z, tx, ty)
                 if _tile_key in _tile_cache:
